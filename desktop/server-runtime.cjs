@@ -72,6 +72,29 @@ function readRuntimeEnvironment(configPath) {
   });
 }
 
+async function copyRuntimeTemplate(sourceDir, destinationDir, fileSystem = fs) {
+  const links = [];
+  await fileSystem.cp(sourceDir, destinationDir, {
+    recursive: true,
+    preserveTimestamps: true,
+    filter: async (source) => {
+      if (!(await fileSystem.lstat(source)).isSymbolicLink()) return true;
+      const target = await fileSystem.readlink(source);
+      const relative = path.relative(sourceDir, path.resolve(path.dirname(source), target));
+      if (path.isAbsolute(target) || relative === '..' || relative.startsWith(`..${path.sep}`)) {
+        throw new Error(`Reader template contains a non-portable symlink: ${source}`);
+      }
+      const type = (await fileSystem.stat(source)).isDirectory() ? 'dir' : 'file';
+      links.push({ source, target, type });
+      return false;
+    },
+  });
+  // fs.cp creates untyped links on Windows, which makes directory links unusable.
+  for (const { source, target, type } of links) {
+    await fileSystem.symlink(target, path.join(destinationDir, path.relative(sourceDir, source)), type);
+  }
+}
+
 class ReaderServerRuntime {
   constructor({
     sourceDir,
@@ -132,22 +155,7 @@ class ReaderServerRuntime {
 
     const stagingDir = `${this.runtimeDir}.${randomUUID()}.tmp`;
     try {
-      await fs.cp(this.sourceDir, stagingDir, {
-        recursive: true,
-        dereference: false,
-        verbatimSymlinks: true,
-        preserveTimestamps: true,
-        filter: async (source) => {
-          if ((await fs.lstat(source)).isSymbolicLink()) {
-            const target = await fs.readlink(source);
-            const relative = path.relative(this.sourceDir, path.resolve(path.dirname(source), target));
-            if (path.isAbsolute(target) || relative === '..' || relative.startsWith(`..${path.sep}`)) {
-              throw new Error(`Reader template contains a non-portable symlink: ${source}`);
-            }
-          }
-          return true;
-        },
-      });
+      await copyRuntimeTemplate(this.sourceDir, stagingDir);
       if (this.stopping) throw new Error('startup cancelled');
       await fs.rm(this.runtimeDir, { recursive: true, force: true });
       await fs.rename(stagingDir, this.runtimeDir);
@@ -275,4 +283,4 @@ class ReaderServerRuntime {
   }
 }
 
-module.exports = { ReaderServerRuntime, findFreePort, probeServer, readRuntimeEnvironment };
+module.exports = { ReaderServerRuntime, copyRuntimeTemplate, findFreePort, probeServer, readRuntimeEnvironment };

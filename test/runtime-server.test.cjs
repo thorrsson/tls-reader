@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { ReaderServerRuntime, findFreePort, probeServer } = require('../desktop/server-runtime.cjs');
+const { ReaderServerRuntime, copyRuntimeTemplate, findFreePort, probeServer } = require('../desktop/server-runtime.cjs');
 
 class FakeUtilityProcess extends EventEmitter {
   constructor() {
@@ -109,6 +109,52 @@ test('rejects staged symlinks that escape the reader template', async (t) => {
   if (!hasSourceSymlink) return t.skip('Symlinks are unavailable');
   await fs.symlink('../outside-reader', path.join(sourceDir, 'escaping-link'));
   await assert.rejects(runtime.start(), /non-portable symlink/);
+});
+
+test('copies directory links with explicit directory type and file links with explicit file type', async () => {
+  const sourceDir = path.resolve('reader-fixture');
+  const destinationDir = path.resolve('runtime-fixture');
+  const created = [];
+  const links = new Map([
+    [path.join(sourceDir, 'package-link'), { target: 'packages/example', directory: true }],
+    [path.join(sourceDir, 'file-link'), { target: 'server.js', directory: false }],
+  ]);
+  const fileSystem = {
+    async cp(source, destination, options) {
+      assert.equal(source, sourceDir);
+      assert.equal(destination, destinationDir);
+      for (const link of links.keys()) {
+        assert.equal(await options.filter(link), false, 'fs.cp must not create untyped links');
+      }
+    },
+    async lstat(source) { return { isSymbolicLink: () => links.has(source) }; },
+    async readlink(source) { return links.get(source).target; },
+    async stat(source) { return { isDirectory: () => links.get(source).directory }; },
+    async symlink(...args) { created.push(args); },
+  };
+  await copyRuntimeTemplate(sourceDir, destinationDir, fileSystem);
+  assert.deepEqual(created, [
+    ['packages/example', path.join(destinationDir, 'package-link'), 'dir'],
+    ['server.js', path.join(destinationDir, 'file-link'), 'file'],
+  ]);
+});
+
+test('copied directory symlinks resolve files within the relocated runtime', async (t) => {
+  const { runtime, sourceDir, hasSourceSymlink } = await createRuntime(t);
+  if (!hasSourceSymlink) return t.skip('Symlinks are unavailable');
+  await fs.mkdir(path.join(sourceDir, 'packages', 'example'), { recursive: true });
+  await fs.writeFile(path.join(sourceDir, 'packages', 'example', 'index.js'), 'package content');
+  await fs.symlink('packages/example', path.join(sourceDir, 'package-link'), 'dir');
+  try {
+    await runtime.start();
+    const link = path.join(runtime.runtimeDir, 'package-link');
+    assert.equal((await fs.lstat(link)).isSymbolicLink(), true);
+    assert.equal(await fs.readlink(link), 'packages/example');
+    assert.equal((await fs.stat(link)).isDirectory(), true);
+    assert.equal(await fs.readFile(path.join(link, 'index.js'), 'utf8'), 'package content');
+  } finally {
+    await runtime.stop();
+  }
 });
 
 test('fails startup when the utility process exits before becoming ready', async (t) => {
