@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 function allowed(source) {
-  const parts = source.split(path.sep);
+  const parts = source.split(/[\\/]/);
   return !parts.some(part => part.startsWith('.env') || ['.git', 'cache', '.cache', '.DS_Store'].includes(part));
 }
 
@@ -25,14 +25,25 @@ function verifyLinks(root, directory = root) {
 function repairTracedLinks(root, target, directory = target) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
-    if (entry.isSymbolicLink() && !fs.existsSync(file)) {
-      const destination = path.resolve(path.dirname(file), fs.readlinkSync(file));
-      if (!destination.startsWith(target + path.sep)) throw new Error(`Escaping traced link: ${file}`);
-      const original = fs.realpathSync(path.join(root, path.relative(target, file)));
-      if (!original.startsWith(fs.realpathSync(path.join(root, 'node_modules')) + path.sep)) {
+    if (entry.isSymbolicLink()) {
+      const link = fs.readlinkSync(file);
+      const originalFile = path.join(root, path.relative(target, file));
+      const original = fs.realpathSync(originalFile);
+      const dependencies = fs.realpathSync(path.join(root, 'node_modules'));
+      if (!original.startsWith(dependencies + path.sep)) {
         throw new Error(`Escaping original dependency: ${original}`);
       }
-      fs.cpSync(original, destination, { recursive: true, dereference: true, filter: allowed });
+      const destination = path.isAbsolute(link)
+        ? path.join(target, path.relative(root, original))
+        : path.resolve(path.dirname(file), link);
+      if (!destination.startsWith(target + path.sep)) throw new Error(`Escaping traced link: ${file}`);
+      if (!fs.existsSync(destination)) {
+        fs.cpSync(original, destination, { recursive: true, dereference: true, filter: allowed });
+      }
+      if (path.isAbsolute(link)) {
+        fs.unlinkSync(file);
+        fs.symlinkSync(path.relative(path.dirname(file), destination), file, fs.statSync(destination).isDirectory() ? 'dir' : 'file');
+      }
     } else if (entry.isDirectory()) {
       repairTracedLinks(root, target, file);
     }
@@ -40,6 +51,7 @@ function repairTracedLinks(root, target, directory = target) {
 }
 
 function stage(root = process.cwd()) {
+  root = fs.realpathSync(root);
   const source = path.join(root, '.next/standalone');
   const target = path.join(root, 'resources/reader');
   if (!fs.existsSync(path.join(source, 'server.js'))) throw new Error('Build standalone reader first');

@@ -21,7 +21,7 @@ test('release backend must explicitly specify public HTTPS endpoints', () => {
   }).NEXT_PUBLIC_TLS_BASE_READER_URL, '');
 });
 test('staging excludes environment files, cache and VCS data', () => {
-  for (const file of ['.env', '.env.local', '.git/config', '.next/cache/test']) assert.equal(allowed(file), false);
+  for (const file of ['.env', '.env.local', '.git/config', '.next/cache/test', '.next\\cache\\test']) assert.equal(allowed(file), false);
   assert.equal(allowed('.next/static/test.js'), true);
 });
 test('staging rejects links to original checkout', () => {
@@ -45,8 +45,10 @@ test('staging repairs incomplete traced pnpm links and includes reader assets wi
       'node_modules/@edrlab/thorium-web/dist/locales',
     ]) fs.mkdirSync(path.join(root, directory), { recursive: true });
     fs.mkdirSync(path.join(root, 'node_modules/.pnpm/node_modules'), { recursive: true });
-    fs.symlinkSync('../semver/node_modules/semver', path.join(root, 'node_modules/.pnpm/node_modules/semver'));
-    fs.symlinkSync('../semver/node_modules/semver', path.join(root, '.next/standalone/node_modules/.pnpm/node_modules/semver'));
+    fs.symlinkSync('../semver/node_modules/semver', path.join(root, 'node_modules/.pnpm/node_modules/semver'), 'dir');
+    fs.symlinkSync('../semver/node_modules/semver', path.join(root, '.next/standalone/node_modules/.pnpm/node_modules/semver'), 'dir');
+    fs.symlinkSync(path.join(root, 'node_modules/.pnpm/semver/node_modules/semver'), path.join(root, '.next/standalone/node_modules/absolute-semver'), 'dir');
+    fs.symlinkSync(path.join(root, 'node_modules/.pnpm/semver/node_modules/semver'), path.join(root, 'node_modules/absolute-semver'), 'dir');
     for (const [file, content] of Object.entries({
       '.next/standalone/server.js': 'server',
       '.next/standalone/.env.production': 'must not ship',
@@ -59,6 +61,7 @@ test('staging repairs incomplete traced pnpm links and includes reader assets wi
     const output = stage(root);
     assert.equal(fs.readFileSync(path.join(output, 'node_modules/.pnpm/node_modules/semver/index.js'), 'utf8'), 'module.exports = true');
     assert.equal(fs.existsSync(path.join(output, '.env.production')), false);
+    assert.equal(path.isAbsolute(fs.readlinkSync(path.join(output, 'node_modules/absolute-semver'))), false);
     for (const file of ['server.js', '.next/static/example.js', 'public/logo.svg', 'node_modules/@edrlab/thorium-web/dist/fonts/example.woff', 'node_modules/@edrlab/thorium-web/dist/locales/en.json']) {
       assert.ok(fs.existsSync(path.join(output, file)), file);
     }

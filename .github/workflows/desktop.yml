@@ -124,6 +124,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Verify Electron binary
+        run: node -e "const fs = require('node:fs'); const binary = require('electron'); if (typeof binary !== 'string' || !fs.statSync(binary).isFile()) { throw new Error('Electron binary must be an existing file'); }"
+
       - name: Run tests
         run: pnpm test
 
@@ -150,7 +156,8 @@ jobs:
         run: |
           command -v xvfb-run
           command -v xauth
-          electron_binary="$(pnpm exec node -p "require('electron')")"
+          electron_binary="$(node -p "require('electron')")"
+          test -f "$electron_binary"
           dependencies="$(ldd "$electron_binary")"
           if grep -q 'not found' <<< "$dependencies"; then
             printf '%s\n' "$dependencies"
