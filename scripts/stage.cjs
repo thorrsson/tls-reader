@@ -40,10 +40,8 @@ function repairTracedLinks(root, target, directory = target) {
       if (!fs.existsSync(destination)) {
         fs.cpSync(original, destination, { recursive: true, dereference: true, filter: allowed });
       }
-      if (path.isAbsolute(link)) {
-        fs.unlinkSync(file);
-        fs.symlinkSync(path.relative(path.dirname(file), destination), file, fs.statSync(destination).isDirectory() ? 'dir' : 'file');
-      }
+      fs.unlinkSync(file);
+      fs.symlinkSync(path.relative(path.dirname(file), destination), file, fs.statSync(destination).isDirectory() ? 'dir' : 'file');
     } else if (entry.isDirectory()) {
       repairTracedLinks(root, target, file);
     }
@@ -69,6 +67,15 @@ function stage(root = process.cwd()) {
   }
   repairTracedLinks(root, target);
   verifyLinks(target);
+  if (process.platform === 'win32') {
+    // Windows packagers recreate directory links as absolute junctions. Ship
+    // ordinary directories so installing elsewhere cannot retain build paths.
+    const materialized = path.join(root, 'resources/reader-materialized');
+    fs.rmSync(materialized, { recursive: true, force: true });
+    fs.cpSync(target, materialized, { recursive: true, dereference: true, filter: allowed });
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(materialized, target);
+  }
   return target;
 }
 
