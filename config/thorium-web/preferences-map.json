@@ -1,0 +1,21 @@
+{
+  "tokens.brand.name": "app.brand.displayName",
+  "tokens.assets.logo.src": "app.brand.logoUrl",
+  "tokens.assets.logo.alt": "app.brand.logoAlt",
+  "tokens.theme.colors.background": "reader.theme.background",
+  "tokens.theme.colors.surface": "reader.theme.surface",
+  "tokens.theme.colors.textPrimary": "reader.theme.textPrimary",
+  "tokens.theme.colors.textSecondary": "reader.theme.textSecondary",
+  "tokens.theme.colors.accent": "reader.theme.accent",
+  "tokens.theme.colors.accentText": "reader.theme.accentText",
+  "tokens.typography.fontFamilyBase": "reader.typography.fontFamilyBase",
+  "tokens.typography.fontFamilyHeading": "reader.typography.fontFamilyHeading",
+  "tokens.typography.fontSizeBase": "reader.typography.fontSizeBase",
+  "tokens.typography.lineHeightBase": "reader.typography.lineHeightBase",
+  "tokens.spacing.md": "reader.layout.spacingBase",
+  "tokens.spacing.radiusMd": "reader.layout.cornerRadius",
+  "tokens.actions.order": "reader.actions.order",
+  "tokens.actions.visibility.download": "reader.actions.download.visible",
+  "tokens.actions.visibility.returnLoan": "reader.actions.return.visible",
+  "tokens.actions.visibility.renewLoan": "reader.actions.renew.visible"
+}

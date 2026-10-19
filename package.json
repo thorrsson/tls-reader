@@ -1,0 +1,39 @@
+{
+  "name": "tls-reader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TLS Library desktop reader",
+  "author": "Tim Hunter",
+  "license": "MIT",
+  "main": "desktop/main.cjs",
+  "packageManager": "pnpm@11.12.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "node --test test/*.test.cjs",
+    "desktop:build": "node scripts/build-desktop.cjs",
+    "desktop:start": "electron .",
+    "desktop:package": "pnpm desktop:build && electron-builder --config electron-builder.yml --publish never",
+    "smoke": "node scripts/smoke.cjs"
+  },
+  "dependencies": {
+    "@edrlab/thorium-web": "^1.5.4",
+    "ajv": "^8.17.1",
+    "next": "16.2.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "electron": "44.9.0",
+    "electron-builder": "26.15.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "typescript": "^5"
+  }
+}

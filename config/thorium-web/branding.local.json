@@ -1,0 +1,85 @@
+{
+  "brand": {
+    "id": "thorium-web",
+    "name": "TLS library"
+  },
+  "theme": {
+    "colors": {
+      "background": "#65182D",
+      "surface": "#FFFFFF",
+      "surfaceAlt": "#ECE7E1",
+      "textPrimary": "#19181D",
+      "textSecondary": "#65182D",
+      "border": "#D2D5D0",
+      "focus": "#EE5B83",
+      "accent": "#65182D",
+      "accentText": "#FFFFFF",
+      "danger": "#B42318",
+      "warning": "#B7791F",
+      "success": "#525849"
+    }
+  },
+  "typography": {
+    "fontFamilyBase": "Inter, system-ui, sans-serif",
+    "fontFamilyHeading": "Merriweather, Georgia, serif",
+    "fontSizeBase": 16,
+    "fontScale": 1.2,
+    "lineHeightBase": 1.5,
+    "fontWeightRegular": 400,
+    "fontWeightMedium": 500,
+    "fontWeightBold": 700
+  },
+  "spacing": {
+    "unit": 4,
+    "xs": 4,
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "radiusSm": 4,
+    "radiusMd": 8,
+    "radiusLg": 12
+  },
+  "assets": {
+    "logo": {
+      "src": "/branding/tls-library/logo.png",
+      "alt": "TLS Library",
+      "width": 52,
+      "height": 49
+    }
+  },
+  "actions": {
+    "order": [
+      "openLibrary",
+      "openCatalog",
+      "readNow",
+      "download",
+      "renewLoan",
+      "returnLoan",
+      "account",
+      "signOut"
+    ],
+    "visibility": {
+      "openLibrary": true,
+      "openCatalog": true,
+      "download": true,
+      "readNow": true,
+      "returnLoan": true,
+      "renewLoan": true,
+      "account": true,
+      "signOut": true
+    }
+  },
+  "authHandoff": {
+    "loginEndpoint": "/auth/login",
+    "entitlementsEndpoint": "/my/entitlements",
+    "acquireEndpointTemplate": "/acquire/{assetId}",
+    "tokenTransport": "bearerHeader",
+    "tokenTtlSkewSeconds": 45
+  },
+  "library": {
+    "source": "entitlements",
+    "requireEntitlement": true,
+    "maxItems": 200
+  }
+}

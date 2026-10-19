@@ -1,2 +1,61 @@
-# tls-reader
-TLS Library reader clients for desktop, with mobile planned
+# TLS Reader
+
+TLS Reader is a desktop ebook reader built with Next.js, Electron 44.9.0, and Thorium Web. Electron runs the bundled Next.js reader in a local `utilityProcess` on loopback and connects to a TLS Library backend for authentication and catalog access. Updates use public GitHub Releases in `thorrsson/tls-reader`.
+
+The reader requires network access to the configured TLS backend to sign in and load publications. Backend URLs are public build-time configuration; do not put credentials, tokens, or other secrets in `NEXT_PUBLIC_*` variables.
+
+## Requirements
+
+- Node.js 22
+- pnpm 11.12.0
+
+## Local development
+
+Install dependencies and run the web app:
+
+```bash
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+pnpm dev
+```
+
+The default local backend URLs use `http://localhost:8080`. Set these variables in `.env.local` to use a different backend:
+
+- `NEXT_PUBLIC_TLS_API_BASE_URL`: TLS API base URL.
+- `NEXT_PUBLIC_TLS_AUTH_URL`: authentication endpoint.
+- `NEXT_PUBLIC_TLS_CATALOG_URL`: OPDS catalog endpoint.
+
+To build and run the desktop app locally:
+
+```bash
+pnpm desktop:build
+pnpm desktop:start
+```
+
+`desktop:build` builds the Next.js reader with an empty base-reader URL and stages the standalone reader for Electron. `pnpm smoke` checks that the staged standalone reader works after relocation.
+
+## Checks and packaging
+
+```bash
+pnpm test
+pnpm lint
+pnpm typecheck
+pnpm desktop:build
+pnpm smoke
+pnpm exec electron desktop/smoke.cjs
+pnpm exec electron-builder --config electron-builder.yml --publish never
+```
+
+The desktop release workflow runs these checks and packages on native macOS, Windows, and Linux runners. It creates a universal macOS DMG and ZIP, a Windows x64 NSIS installer, and a Linux x64 AppImage. See [docs/RELEASING.md](docs/RELEASING.md) for release configuration and signing.
+
+`pnpm typecheck` generates Next.js types before running TypeScript, including on a clean checkout. Packaging uses the minimal `desktop/` workspace package rather than shipping the root development dependency tree.
+
+The hidden Electron smoke checks the login page, API session response, local-server authentication, renderer isolation, and graceful shutdown. CI repeats it against the packaged resources after packaging; this does not launch the packaged application binary. Linux CI uses Xvfb and a CI-only `--no-sandbox` exception; see the release guide for its limitations. Normal desktop launches must not use that flag.
+
+The pnpm dependency policy permits one pinned upstream Thorium Git locale dependency: `@edrlab/thorium-locales` at commit `b416fdb5cfa7ade7562fe108550e3b566857a7b1`. The workspace override fixes the archive URL and the lockfile records its integrity; see the release guide before changing this exception.
+
+Mobile applications are not included in this repository's desktop release workflow.
+
+## License
+
+MIT © 2026 Tim Hunter. See [LICENSE](LICENSE).

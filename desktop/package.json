@@ -1,0 +1,12 @@
+{
+  "name": "tls-reader-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TLS Library desktop reader",
+  "author": "Tim Hunter",
+  "license": "MIT",
+  "main": "main.cjs",
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  }
+}

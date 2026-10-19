@@ -1,0 +1,43 @@
+appId: com.tlslibrary.reader
+productName: TLS Reader
+asar: true
+directories:
+  app: desktop
+  output: dist
+files:
+  - "*.cjs"
+  - "!smoke.cjs"
+  - package.json
+extraResources:
+  - from: resources/reader
+    to: reader
+  - from: resources/reader/node_modules
+    to: reader/node_modules
+artifactName: TLS-Reader-${version}-${os}-${arch}.${ext}
+publish:
+  provider: github
+  owner: thorrsson
+  repo: tls-reader
+  releaseType: draft
+mac:
+  category: public.app-category.books
+  hardenedRuntime: true
+  notarize: true
+  target:
+    - target: dmg
+      arch: universal
+    - target: zip
+      arch: universal
+  x64ArchFiles: "Contents/Resources/reader/node_modules/.pnpm/@img*/**/*"
+win:
+  target:
+    - target: nsis
+      arch: x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  category: Office
+  target:
+    - target: AppImage
+      arch: x64
