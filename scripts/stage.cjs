@@ -48,7 +48,7 @@ function repairTracedLinks(root, target, directory = target) {
   }
 }
 
-function stage(root = process.cwd()) {
+function stage(root = process.cwd(), materialize = process.platform === 'win32') {
   root = fs.realpathSync(root);
   const source = path.join(root, '.next/standalone');
   const target = path.join(root, 'resources/reader');
@@ -67,12 +67,20 @@ function stage(root = process.cwd()) {
   }
   repairTracedLinks(root, target);
   verifyLinks(target);
-  if (process.platform === 'win32') {
+  if (materialize) {
     // Windows packagers recreate directory links as absolute junctions. Ship
     // ordinary directories so installing elsewhere cannot retain build paths.
     const materialized = path.join(root, 'resources/reader-materialized');
     fs.rmSync(materialized, { recursive: true, force: true });
     fs.cpSync(target, materialized, { recursive: true, dereference: true, filter: allowed });
+    const aliases = path.join(target, 'node_modules/.pnpm/node_modules');
+    if (fs.existsSync(aliases)) {
+      // Dereferenced root packages no longer resolve through pnpm's virtual
+      // store. Move the traced hoisted aliases into their new ancestor.
+      fs.cpSync(aliases, path.join(materialized, 'node_modules'), {
+        recursive: true, dereference: true, filter: allowed,
+      });
+    }
     fs.rmSync(target, { recursive: true, force: true });
     fs.renameSync(materialized, target);
   }

@@ -58,14 +58,11 @@ test('staging repairs incomplete traced pnpm links and includes reader assets wi
       '.next/static/example.js': 'js',
       'public/logo.svg': 'logo',
     })) fs.writeFileSync(path.join(root, file), content);
-    const output = stage(root);
+    const output = stage(root, true);
     assert.equal(fs.readFileSync(path.join(output, 'node_modules/.pnpm/node_modules/semver/index.js'), 'utf8'), 'module.exports = true');
     assert.equal(fs.existsSync(path.join(output, '.env.production')), false);
-    if (process.platform === 'win32') {
-      assert.equal(fs.lstatSync(path.join(output, 'node_modules/absolute-semver')).isSymbolicLink(), false);
-    } else {
-      assert.equal(path.isAbsolute(fs.readlinkSync(path.join(output, 'node_modules/absolute-semver'))), false);
-    }
+    assert.equal(fs.lstatSync(path.join(output, 'node_modules/absolute-semver')).isSymbolicLink(), false);
+    assert.ok(fs.existsSync(path.join(output, 'node_modules/semver/index.js')));
     for (const file of ['server.js', '.next/static/example.js', 'public/logo.svg', 'node_modules/@edrlab/thorium-web/dist/fonts/example.woff', 'node_modules/@edrlab/thorium-web/dist/locales/en.json']) {
       assert.ok(fs.existsSync(path.join(output, file)), file);
     }
