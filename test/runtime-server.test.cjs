@@ -149,7 +149,7 @@ test('copied directory symlinks resolve files within the relocated runtime', asy
     await runtime.start();
     const link = path.join(runtime.runtimeDir, 'package-link');
     assert.equal((await fs.lstat(link)).isSymbolicLink(), true);
-    assert.equal(await fs.readlink(link), 'packages/example');
+    assert.equal(await fs.readlink(link), path.join('packages', 'example'));
     assert.equal((await fs.stat(link)).isDirectory(), true);
     assert.equal(await fs.readFile(path.join(link, 'index.js'), 'utf8'), 'package content');
   } finally {
