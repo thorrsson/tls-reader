@@ -105,7 +105,7 @@ async function run() {
     if (runtime.exitInfo?.code !== 0 && !failure) {
       failure = new Error(`Utility process did not exit gracefully: ${JSON.stringify(runtime.exitInfo)}`);
     }
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     clearTimeout(deadline);
   }
   if (failure) throw failure;
