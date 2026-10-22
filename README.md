@@ -10,6 +10,12 @@ Use **Edit > Paste**, Cmd+V on macOS or Ctrl+V on Windows/Linux, or right-click 
 
 Electron does not include browser password-manager extensions or a built-in password vault. Native password-manager autofill availability depends on your manager's desktop integration; copying and pasting works without that integration. TLS Reader never reads the clipboard through its own IPC bridge or stores your password.
 
+## Desktop menus
+
+The desktop window keeps the book or library in the content pane. **Account** opens the sign-in dialog or signs out; **Library** shows or refreshes your catalog; **Reading** opens reading settings and contents; **View** switches library layouts or enters full screen. Reading commands are enabled only after a publication is ready. Bookmarks are explicitly unavailable because the bundled Thorium version does not provide a bookmark UI/store action. Edit commands and update controls remain in the application menu.
+
+The sandboxed preload exposes only named menu commands and bounded UI state. The main process accepts state only from the local application's top-level frame; it exposes no filesystem, credential, navigation or arbitrary IPC methods. The standalone web app retains its on-page controls.
+
 ## Requirements
 
 - Node.js 22

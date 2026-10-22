@@ -39,6 +39,33 @@ body.tls-reader-active {
   background: #000;
 }
 
+.thorium-app-desktop {
+  grid-template-rows: 1fr;
+}
+
+.desktop-login {
+  border: 1px solid var(--tls-border);
+  border-radius: 16px;
+  padding: 24px;
+  width: min(440px, calc(100vw - 32px));
+  color: var(--tls-text);
+  background: var(--tls-surface);
+}
+
+.desktop-login::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.desktop-login .auth-form {
+  margin: 0;
+  width: 100%;
+}
+
+.desktop-welcome {
+  color: var(--tls-accent-text);
+  text-align: center;
+}
+
 .thorium-toolbar {
   display: flex;
   flex-wrap: wrap;

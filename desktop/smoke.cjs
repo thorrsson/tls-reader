@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, Menu, clipboard, utilityProcess } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, ipcMain, utilityProcess } = require('electron');
 const packagedResourcesArg = process.argv.find((arg) => arg.startsWith('--packaged-resources='));
 const packagedResources = packagedResourcesArg
   ? path.resolve(packagedResourcesArg.slice('--packaged-resources='.length))
@@ -12,6 +12,7 @@ const moduleDir = packagedResources ? path.join(packagedResources, 'app.asar') :
 const { ReaderServerRuntime } = require(path.join(moduleDir, 'server-runtime.cjs'));
 const { secureWindow } = require(path.join(moduleDir, 'window-security.cjs'));
 const { applicationMenuTemplate, installEditingContextMenu } = require(path.join(moduleDir, 'menus.cjs'));
+const { installDesktopBridge } = require(path.join(moduleDir, 'bridge.cjs'));
 
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.on('window-all-closed', () => {});
@@ -34,6 +35,9 @@ async function run() {
   let rendererFailure;
   let unexpectedExit;
   let failure;
+  let menuState;
+  let commandBridge;
+  let fixtureServer;
   const testClipboard = process.env.CI === 'true';
   const runtime = new ReaderServerRuntime({
     sourceDir: packagedResources
@@ -62,6 +66,7 @@ async function run() {
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
+        preload: path.join(moduleDir, 'preload.cjs'),
         partition: `tls-reader-smoke-${process.pid}`,
       },
     });
@@ -73,10 +78,18 @@ async function run() {
       token: runtime.authToken,
       openExternal: (url) => { throw new Error(`Unexpected external navigation: ${url}`); },
     });
-    Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenuTemplate({
-      checkForUpdates: () => {},
-      installUpdate: () => {},
-    })));
+    commandBridge = installDesktopBridge({
+      ipcMain, window, serverUrl,
+      onState: state => {
+        menuState = state;
+        Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenuTemplate({
+          state,
+          checkForUpdates: () => {},
+          installUpdate: () => {},
+          command: command => commandBridge.send(command),
+        })));
+      },
+    });
     installEditingContextMenu(window, Menu);
     await window.loadURL(serverUrl);
     let page;
@@ -84,7 +97,7 @@ async function run() {
     do {
       page = await window.webContents.executeJavaScript(`({
         title: document.title,
-        login: Boolean(document.querySelector('input[type="password"]')),
+        login: Boolean(document.querySelector('dialog[open] input[type="password"]')),
         nodeExposed: typeof process !== 'undefined' || typeof require !== 'undefined'
       })`);
       if (page.login) break;
@@ -93,6 +106,13 @@ async function run() {
     assert.ok(page.title.trim(), 'reader page must have a title');
     assert.equal(page.login, true, 'reader login form must render');
     assert.equal(page.nodeExposed, false, 'renderer must not expose Node globals');
+    assert.equal(menuState.authenticated, false);
+    assert.equal(menuState.busy, false);
+    assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('.thorium-toolbar'))"), false);
+    await window.webContents.executeJavaScript("document.querySelector('dialog').close()");
+    commandBridge.send('sign-in');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('dialog').open"), true);
     assert.equal(window.isVisible(), false, 'smoke must never show a window');
     const apiStatus = await window.webContents.executeJavaScript(
       "fetch('/api/library/session').then(response => response.status)",
@@ -121,12 +141,38 @@ async function run() {
       await new Promise(resolve => setTimeout(resolve, 50));
     } while (Date.now() < inputDeadline);
     assert.equal(filledPassword, 'synthetic-paste-password', 'native password-field insertion must work');
+    fixtureServer = http.createServer((request, response) => {
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      if (request.url === '/manifest.json') {
+        const origin = `http://127.0.0.1:${fixtureServer.address().port}`;
+        response.setHeader('content-type', 'application/webpub+json');
+        response.end(JSON.stringify({
+          '@context': 'https://readium.org/webpub-manifest/context.jsonld',
+          metadata: {
+            '@type': 'https://schema.org/Book', title: 'Desktop Menu Smoke',
+            identifier: 'tls-menu-smoke', language: 'en',
+            conformsTo: 'https://readium.org/webpub-manifest/profiles/epub',
+          },
+          links: [{ rel: 'self', href: `${origin}/manifest.json`, type: 'application/webpub+json' }],
+          readingOrder: [{ href: `${origin}/chapter.xhtml`, type: 'application/xhtml+xml', title: 'Chapter One' }],
+          toc: [{ href: `${origin}/chapter.xhtml`, title: 'Chapter One' }],
+        }));
+      } else {
+        response.setHeader('content-type', 'application/xhtml+xml');
+        response.end('<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter One</title></head><body><h1>Chapter One</h1><p>A synthetic book for native menu verification.</p></body></html>');
+      }
+    });
+    await new Promise(resolve => fixtureServer.listen(0, '127.0.0.1', resolve));
+    const manifestUrl = `http://127.0.0.1:${fixtureServer.address().port}/manifest.json`;
     await window.webContents.executeJavaScript(`(() => {
       const originalFetch = window.fetch;
       window.fetch = (url, options) => {
         if (url === '/api/library/session' && options?.method === 'POST') {
           window.smokeCredentials = JSON.parse(options.body);
-          return Promise.resolve(new Response(JSON.stringify({ books: [] }), {
+          return Promise.resolve(new Response(JSON.stringify({ books: [{
+            title: 'Desktop Menu Smoke', manifestUrl: ${JSON.stringify(manifestUrl)},
+            publicationId: null, identifier: 'tls-menu-smoke', assetId: null, coverUrl: null, author: null
+          }] }), {
             status: 200, headers: { 'content-type': 'application/json' }
           }));
         }
@@ -139,6 +185,39 @@ async function run() {
     const submitted = await window.webContents.executeJavaScript('window.smokeCredentials');
     assert.deepEqual(submitted, { email: 'autofill@example.com', password: 'synthetic-autofill-password' },
       'login must submit password-manager-filled DOM values without React change events');
+    const stateDeadline = Date.now() + 3000;
+    while (!menuState.authenticated && Date.now() < stateDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(menuState.authenticated, true);
+    commandBridge.send('view-list');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(menuState.catalogView, 'list');
+    assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('.catalog-view-toggle'))"), false);
+    await window.webContents.executeJavaScript("document.querySelector('.catalog-row-list li button').click()");
+    const readerDeadline = Date.now() + 30_000;
+    while (!menuState.readerReady && Date.now() < readerDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(menuState.readerReady, true, 'synthetic publication must enable native reading commands');
+    commandBridge.send('reading-settings');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('[role=\"dialog\"]'))"), true,
+      'native reading settings must open the reader sheet');
+    await window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    await window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    commandBridge.send('table-of-contents');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('[role=\"dialog\"]'))"), true,
+      'native contents must open the reader sheet');
+    commandBridge.send('show-library');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(menuState.reading, false);
+    assert.equal(menuState.readerReady, false);
+    commandBridge.send('sign-out');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(menuState.authenticated, false);
     assert.equal(rendererFailure, undefined, 'renderer must not crash');
     assert.equal(unexpectedExit, undefined, 'utility process must remain running');
     console.log(JSON.stringify({
@@ -150,6 +229,10 @@ async function run() {
   } finally {
     window?.destroy();
     await runtime.stop();
+    if (fixtureServer) {
+      fixtureServer.closeAllConnections();
+      await new Promise(resolve => fixtureServer.close(resolve));
+    }
     if (runtime.exitInfo?.code !== 0 && !failure) {
       failure = new Error(`Utility process did not exit gracefully: ${JSON.stringify(runtime.exitInfo)}`);
     }

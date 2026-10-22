@@ -1,11 +1,12 @@
 const path = require('node:path');
-const { app, BrowserWindow, dialog, Menu, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, utilityProcess } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { ReaderServerRuntime } = require('./server-runtime.cjs');
 const { isAllowedExternalUrl } = require('./url-policy.cjs');
 const { secureWindow } = require('./window-security.cjs');
 const { UpdateController } = require('./updater.cjs');
 const { applicationMenuTemplate, installEditingContextMenu } = require('./menus.cjs');
+const { initialState, installDesktopBridge } = require('./bridge.cjs');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -16,6 +17,8 @@ if (!app.requestSingleInstanceLock()) {
   let serverUrl = null;
   let quitting = false;
   let completedShutdown = false;
+  let menuState = { ...initialState };
+  let bridge = null;
 
   function focusMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -47,6 +50,7 @@ if (!app.requestSingleInstanceLock()) {
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
+        preload: path.join(__dirname, 'preload.cjs'),
       },
     });
     const window = mainWindow;
@@ -55,6 +59,13 @@ if (!app.requestSingleInstanceLock()) {
       if (mainWindow === window) mainWindow = null;
     });
     secureWindow(window, { serverUrl, token: runtime.authToken, openExternal });
+    bridge = installDesktopBridge({
+      ipcMain, window, serverUrl,
+      onState: (state) => {
+        menuState = state;
+        installApplicationMenu();
+      },
+    });
     installEditingContextMenu(window, Menu);
     window.loadURL(serverUrl).catch((error) => {
       console.error('Could not load the local reader:', error);
@@ -67,6 +78,11 @@ if (!app.requestSingleInstanceLock()) {
     const template = applicationMenuTemplate({
       checkForUpdates: () => updater?.checkNow(),
       installUpdate: () => updater?.installNow(),
+      state: menuState,
+      command: (command) => {
+        focusMainWindow();
+        bridge?.send(command);
+      },
     });
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   }

@@ -16,10 +16,17 @@ import "@edrlab/thorium-web/reader/styles";
 import "@edrlab/thorium-web/epub/styles";
 import "@edrlab/thorium-web/webpub/styles";
 import "@edrlab/thorium-web/misc/styles";
+import { createDesktopReaderPlugins } from "./reader-desktop-controls";
 
 type ReaderRuntimeProps = {
   manifestUrl: string;
   publicationId: string | null;
+  desktop?: boolean;
+};
+
+const desktopReaderPlugins = {
+  epub: createDesktopReaderPlugins,
+  webPub: createDesktopReaderPlugins,
 };
 
 type SerializedLocator = {
@@ -268,10 +275,12 @@ const ReaderContent = ({
   manifestUrl,
   storageKey,
   publicationId,
+  desktop,
 }: {
   manifestUrl: string;
   storageKey: string;
   publicationId: string | null;
+  desktop: boolean;
 }) => {
   const { publication, localDataKey, profile, isLoading, error } = usePublication({
     url: manifestUrl,
@@ -432,11 +441,16 @@ const ReaderContent = ({
       positionStorage={positionStorage}
       preferences={readerPreferences}
       i18n={readerI18nFallbackOptions}
+      plugins={desktop ? desktopReaderPlugins : undefined}
     />
   );
 };
 
-export default function ReaderRuntime({ manifestUrl, publicationId }: ReaderRuntimeProps) {
+export default function ReaderRuntime({
+  manifestUrl,
+  publicationId,
+  desktop = false,
+}: ReaderRuntimeProps) {
   const storageKey = `tls-thorium-v2:${encodeURIComponent(manifestUrl)}`;
   return (
     <ThStoreProvider storageKey={storageKey}>
@@ -445,6 +459,7 @@ export default function ReaderRuntime({ manifestUrl, publicationId }: ReaderRunt
           manifestUrl={manifestUrl}
           storageKey={storageKey}
           publicationId={publicationId}
+          desktop={desktop}
         />
       </StatefulGlobalPreferencesProvider>
     </ThStoreProvider>

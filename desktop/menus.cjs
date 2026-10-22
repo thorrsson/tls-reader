@@ -1,8 +1,17 @@
-function applicationMenuTemplate({ checkForUpdates, installUpdate }) {
+const { initialState, commandEnabled } = require('./bridge.cjs');
+
+function applicationMenuTemplate({ checkForUpdates, installUpdate, command = () => {}, state = initialState }) {
+  const item = (label, name, accelerator) => ({
+    label, id: name, enabled: commandEnabled(name, state),
+    ...(accelerator ? { accelerator } : {}),
+    click: () => command(name),
+  });
   return [
     {
       label: 'TLS Reader',
       submenu: [
+        { role: 'about' },
+        { type: 'separator' },
         { label: 'Check for Updates…', click: checkForUpdates },
         { label: 'Install Downloaded Update', click: installUpdate },
         { type: 'separator' },
@@ -10,6 +19,34 @@ function applicationMenuTemplate({ checkForUpdates, installUpdate }) {
       ],
     },
     { role: 'editMenu' },
+    {
+      label: 'Account',
+      submenu: [item('Sign In…', 'sign-in'), item('Sign Out', 'sign-out')],
+    },
+    {
+      label: 'Library',
+      submenu: [
+        item('Show Library', 'show-library', 'CmdOrCtrl+L'),
+        item('Refresh Library', 'refresh-library', 'CmdOrCtrl+Shift+R'),
+      ],
+    },
+    {
+      label: 'Reading',
+      submenu: [
+        item('Reading Settings…', 'reading-settings', 'CmdOrCtrl+,'),
+        item('Table of Contents…', 'table-of-contents', 'CmdOrCtrl+Shift+T'),
+        { ...item('Bookmarks (not supported by this reader)', 'bookmarks'), enabled: false },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { ...item('Library Grid', 'view-grid'), type: 'radio', checked: state.catalogView === 'grid' },
+        { ...item('Library List', 'view-list'), type: 'radio', checked: state.catalogView === 'list' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
   ];
 }
 

@@ -2,10 +2,15 @@
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import brandingConfig from "@/config/thorium-web/branding.local.json";
 import ReaderErrorBoundary from "./reader-error-boundary";
+import type { DesktopCommand } from "@/lib/desktop";
+
+const subscribeDesktop = () => () => {};
+const desktopSnapshot = () => Boolean(window.tlsDesktop);
+const serverDesktopSnapshot = () => false;
 
 const ReaderRuntime = dynamic(() => import("./reader-runtime"), {
   ssr: false,
@@ -53,12 +58,15 @@ const normalizeLoadError = (message: string): string => {
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isBusy, setIsBusy] = useState(false);
+  const [isBusy, setIsBusy] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [currentBook, setCurrentBook] = useState<CatalogItem | null>(null);
   const [catalogView, setCatalogView] = useState<"grid" | "list">("grid");
   const [libraryViewRevision, setLibraryViewRevision] = useState(0);
+  const [readerReady, setReaderReady] = useState(false);
+  const desktop = useSyncExternalStore(subscribeDesktop, desktopSnapshot, serverDesktopSnapshot);
+  const loginDialog = useRef<HTMLDialogElement>(null);
   const isReading = Boolean(currentBook?.manifestUrl);
 
   const themeVars: CSSProperties & Record<string, string> = {
@@ -83,6 +91,7 @@ export default function Home() {
       return;
     }
     setCurrentBook(book);
+    setReaderReady(false);
   };
 
   useEffect(() => {
@@ -109,6 +118,32 @@ export default function Home() {
       document.body.classList.remove("tls-reader-active");
     };
   }, [isReading]);
+
+  useEffect(() => {
+    if (desktop && !isAuthenticated && !isBusy && !loginDialog.current?.open) {
+      loginDialog.current?.showModal();
+    }
+  }, [desktop, isAuthenticated, isBusy]);
+
+  useEffect(() => {
+    const ready = (event: Event) => {
+      if (event instanceof CustomEvent && typeof event.detail === "boolean") {
+        setReaderReady(event.detail);
+      }
+    };
+    window.addEventListener("tls-reader-ready", ready);
+    return () => window.removeEventListener("tls-reader-ready", ready);
+  }, []);
+
+  useEffect(() => {
+    window.tlsDesktop?.reportState({
+      authenticated: isAuthenticated,
+      busy: isBusy,
+      reading: isReading,
+      readerReady: isReading && readerReady,
+      catalogView,
+    });
+  }, [isAuthenticated, isBusy, isReading, readerReady, catalogView, desktop]);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -164,22 +199,92 @@ export default function Home() {
     }
   };
 
-  const handleSignOut = async () => {
-    await fetch("/api/library/session", { method: "DELETE" });
-    setIsAuthenticated(false);
-    setCatalog([]);
-    setCurrentBook(null);
+  const handleSignOut = useCallback(async () => {
+    setIsBusy(true);
     setLoadError(null);
-  };
+    try {
+      const response = await fetch("/api/library/session", { method: "DELETE" });
+      if (!response.ok) throw new Error("Unable to sign out. Please try again.");
+      setIsAuthenticated(false);
+      setCatalog([]);
+      setCurrentBook(null);
+      setReaderReady(false);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to sign out.");
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
 
-  const handleBackToLibrary = () => {
+  const handleBackToLibrary = useCallback(() => {
     setCurrentBook(null);
+    setReaderReady(false);
     setLibraryViewRevision((current) => current + 1);
-  };
+  }, []);
+
+  const refreshLibrary = useCallback(async () => {
+    setIsBusy(true);
+    setLoadError(null);
+    try {
+      const response = await fetch("/api/library/session");
+      const payload = (await response.json()) as SessionResponse;
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setIsAuthenticated(false);
+          setCatalog([]);
+        }
+        throw new Error(payload.error || "Unable to refresh your library.");
+      }
+      setCatalog(payload.books ?? []);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to refresh your library.");
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => window.tlsDesktop?.onCommand((command: DesktopCommand) => {
+    if (isBusy) return;
+    if (command === "sign-in" && !isAuthenticated) {
+      if (!loginDialog.current?.open) loginDialog.current?.showModal();
+      document.getElementById("login-username")?.focus();
+    } else if (command === "sign-out" && isAuthenticated) {
+      void handleSignOut();
+    } else if (command === "show-library" && isAuthenticated) {
+      handleBackToLibrary();
+    } else if (command === "refresh-library" && isAuthenticated && !isReading) {
+      void refreshLibrary();
+    } else if ((command === "view-grid" || command === "view-list") && isAuthenticated && !isReading) {
+      setCatalogView(command === "view-grid" ? "grid" : "list");
+    } else if (isReading && readerReady) {
+      window.dispatchEvent(new CustomEvent("tls-reader-command", { detail: command }));
+    }
+  }), [desktop, isBusy, isAuthenticated, isReading, readerReady, handleSignOut, handleBackToLibrary, refreshLibrary]);
+
+  const signInForm = (
+    <form className="auth-form" onSubmit={handleLogin}>
+      <h2 id="login-title">Sign in to your library</h2>
+      {desktop && loadError ? <p role="alert">{loadError}</p> : null}
+      <label>
+        Email
+        <input id="login-username" name="username" type="email" autoComplete="username"
+          autoCapitalize="none" spellCheck={false} required />
+      </label>
+      <label>
+        Password
+        <input id="login-password" name="password" type="password" autoComplete="current-password" required />
+      </label>
+      <button type="submit" disabled={isBusy}>{isBusy ? "Signing in…" : "Sign in"}</button>
+      {desktop ? (
+        <button type="button" className="tls-secondary-btn" disabled={isBusy}
+          onClick={() => loginDialog.current?.close()}>Cancel</button>
+      ) : null}
+    </form>
+  );
 
   return (
-    <main className={`thorium-app${isReading ? " thorium-app-reading" : ""}`} style={themeVars}>
-      {!isReading ? (
+    <main className={`thorium-app${isReading ? " thorium-app-reading" : ""}${desktop ? " thorium-app-desktop" : ""}`} style={themeVars}>
+      {!isReading && !desktop ? (
         <header className="thorium-toolbar" key={`header-${libraryViewRevision}`}>
           <div className="thorium-brand">
             <Image
@@ -201,42 +306,22 @@ export default function Home() {
         </header>
       ) : null}
 
-      {loadError ? <div className="reader-inline-error">{loadError}</div> : null}
+      {loadError && (!desktop || isAuthenticated) ? <div role="alert" className="reader-inline-error">{loadError}</div> : null}
 
       {!isAuthenticated ? (
         <section className="auth-shell">
-          <form className="auth-form" onSubmit={handleLogin}>
-            <h2>Sign in to your library</h2>
-            <label>
-              Email
-              <input
-                id="login-username"
-                name="username"
-                type="email"
-                autoComplete="username"
-                autoCapitalize="none"
-                spellCheck={false}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                id="login-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button type="submit" disabled={isBusy}>
-              {isBusy ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
+          {desktop ? (
+            <>
+              <p className="desktop-welcome">Use Account → Sign In to open your library.</p>
+              <dialog ref={loginDialog} className="desktop-login" aria-labelledby="login-title">
+                {signInForm}
+              </dialog>
+            </>
+          ) : signInForm}
         </section>
       ) : currentBook?.manifestUrl ? (
         <section className="thorium-runtime">
-          <div className="reader-overlay-controls">
+          {!desktop ? <div className="reader-overlay-controls">
             <button
               type="button"
               className="tls-reader-back-btn"
@@ -244,10 +329,11 @@ export default function Home() {
             >
               Back to library
             </button>
-          </div>
+          </div> : null}
           <ReaderErrorBoundary>
             <div className="thorium-runtime-frame">
               <ReaderRuntime
+                desktop={desktop}
                 manifestUrl={currentBook.manifestUrl}
                 publicationId={currentBook.publicationId}
               />
@@ -258,7 +344,7 @@ export default function Home() {
         <section className="catalog-list" key={`catalog-${libraryViewRevision}`}>
           <div className="catalog-header">
             <h2>Your books</h2>
-            <div className="catalog-view-toggle">
+            {!desktop ? <div className="catalog-view-toggle">
               <button
                 type="button"
                 className={catalogView === "grid" ? "is-active" : ""}
@@ -273,7 +359,7 @@ export default function Home() {
               >
                 List
               </button>
-            </div>
+            </div> : null}
           </div>
           {!visibleCatalog.length ? (
             <p className="empty-library">No entitled books were returned for this account.</p>
