@@ -20,6 +20,7 @@ publish:
   repo: tls-reader
   releaseType: draft
 mac:
+  icon: assets/icons/icon.icns
   category: public.app-category.books
   hardenedRuntime: true
   notarize: true
@@ -30,6 +31,7 @@ mac:
       arch: universal
   x64ArchFiles: "Contents/Resources/reader/node_modules/.pnpm/@img*/**/*"
 win:
+  icon: assets/icons/icon.ico
   target:
     - target: nsis
       arch: x64
@@ -37,6 +39,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:
+  icon: assets/icons
   category: Office
   target:
     - target: AppImage

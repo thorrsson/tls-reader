@@ -62,6 +62,10 @@ The pnpm dependency policy permits one pinned upstream Thorium Git locale depend
 
 Mobile applications are not included in this repository's desktop release workflow.
 
+## App icon
+
+The original bookshelf icon uses the TLS burgundy palette. Its editable source is `assets/icon.svg`; packaged macOS, Windows and Linux icons are checked into `assets/icons/`. Run `pnpm icons` after editing the SVG (macOS is required to regenerate the ICNS file).
+
 ## License
 
 MIT © 2026 Tim Hunter. See [LICENSE](LICENSE).
