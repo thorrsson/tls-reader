@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function loadControls({ profile = 'epub', isLoading = false, available = true } = {}) {
+function loadControls({ profile = 'epub', isLoading = false, available = true, store, setActionOpen } = {}) {
   const window = new EventTarget();
   const effects = [];
   const actions = [];
@@ -29,10 +29,13 @@ function loadControls({ profile = 'epub', isLoading = false, available = true } 
   const thorium = {
     createDefaultPlugin: () => defaults,
     StatefulVisualSettingsContainer: settingsTarget,
-    useAppDispatch: () => action => actions.push(action),
-    useAppSelector: select => select({ reader: { profile, isLoading } }),
+    useAppDispatch: () => action => {
+      actions.push(action);
+      return store?.dispatch(action);
+    },
+    useAppSelector: select => select(store?.getState() ?? { reader: { profile, isLoading } }),
     useActionComponentStatus: () => ({ isComponentAvailable: available }),
-    setActionOpen: payload => ({ type: 'actions/setActionOpen', payload }),
+    setActionOpen: setActionOpen ?? (payload => ({ type: 'actions/setActionOpen', payload })),
   };
   const jsx = (type, props) => ({ type, props });
   const filename = path.join(__dirname, '../app/reader-desktop-controls.tsx');
@@ -126,4 +129,39 @@ test('desktop plugin hides only duplicate triggers without losing sheets or navi
   const children = target.props.children;
   assert.equal(children[0].type, controls.default);
   assert.equal(children[1].type, controls.settingsTarget);
+});
+
+test('command events open actual Thorium reducer sheets without changing other profiles', async () => {
+  const { actionsSlice, setActionOpen } =
+    await import('@edrlab/thorium-web/core/lib');
+  for (const profile of ['epub', 'webPub']) {
+    let state = {
+      reader: { profile, isLoading: false },
+      actions: actionsSlice.reducer(undefined, { type: 'test/init' }),
+    };
+    // Exercise the real reducer without makeStore's browser persistence timer.
+    const store = {
+      getState: () => state,
+      dispatch: action => {
+        const actions = actionsSlice.reducer(state.actions, action);
+        if (actions !== state.actions) state = { ...state, actions };
+      },
+    };
+    const otherProfile = profile === 'epub' ? 'webPub' : 'epub';
+    const otherBefore = store.getState().actions.keys[otherProfile];
+    const controls = loadControls({ store, setActionOpen });
+    const unmount = controls.mount();
+    controls.command('reading-settings');
+    assert.equal(store.getState().actions.keys[profile].settings.isOpen, true);
+    controls.command('table-of-contents');
+    assert.equal(store.getState().actions.keys[profile].toc.isOpen, true);
+    assert.equal(store.getState().actions.keys[otherProfile], otherBefore);
+    const beforeUnsupportedCommand = store.getState();
+    controls.command('bookmarks');
+    assert.equal(store.getState(), beforeUnsupportedCommand);
+    unmount();
+    store.dispatch(setActionOpen({ key: 'settings', isOpen: false, profile }));
+    controls.command('reading-settings');
+    assert.equal(store.getState().actions.keys[profile].settings.isOpen, false);
+  }
 });
