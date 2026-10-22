@@ -4,6 +4,12 @@ TLS Reader is a desktop ebook reader built with Next.js, Electron 44.9.0, and Th
 
 The reader requires network access to the configured TLS backend to sign in and load publications. Backend URLs are public build-time configuration; do not put credentials, tokens, or other secrets in `NEXT_PUBLIC_*` variables.
 
+## Signing in
+
+Use **Edit > Paste**, Cmd+V on macOS or Ctrl+V on Windows/Linux, or right-click a login field and choose **Paste**. You can copy credentials from your password manager instead of typing them. Login fields use standard username/current-password autofill metadata and submit their current values, including values filled by desktop password-manager tools.
+
+Electron does not include browser password-manager extensions or a built-in password vault. Native password-manager autofill availability depends on your manager's desktop integration; copying and pasting works without that integration. TLS Reader never reads the clipboard through its own IPC bridge or stores your password.
+
 ## Requirements
 
 - Node.js 22

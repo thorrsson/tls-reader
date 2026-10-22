@@ -5,6 +5,7 @@ const { ReaderServerRuntime } = require('./server-runtime.cjs');
 const { isAllowedExternalUrl } = require('./url-policy.cjs');
 const { secureWindow } = require('./window-security.cjs');
 const { UpdateController } = require('./updater.cjs');
+const { applicationMenuTemplate, installEditingContextMenu } = require('./menus.cjs');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -54,6 +55,7 @@ if (!app.requestSingleInstanceLock()) {
       if (mainWindow === window) mainWindow = null;
     });
     secureWindow(window, { serverUrl, token: runtime.authToken, openExternal });
+    installEditingContextMenu(window, Menu);
     window.loadURL(serverUrl).catch((error) => {
       console.error('Could not load the local reader:', error);
       dialog.showErrorBox('TLS Reader failed to load', error.message);
@@ -62,15 +64,10 @@ if (!app.requestSingleInstanceLock()) {
   }
 
   function installApplicationMenu() {
-    const template = [{
-      label: 'TLS Reader',
-      submenu: [
-        { label: 'Check for Updates…', click: () => updater?.checkNow() },
-        { label: 'Install Downloaded Update', click: () => updater?.installNow() },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    }];
+    const template = applicationMenuTemplate({
+      checkForUpdates: () => updater?.checkNow(),
+      installUpdate: () => updater?.installNow(),
+    });
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   }
 

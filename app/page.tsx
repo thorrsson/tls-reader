@@ -52,8 +52,6 @@ const normalizeLoadError = (message: string): string => {
 };
 
 export default function Home() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -137,6 +135,7 @@ export default function Home() {
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const credentials = new FormData(event.currentTarget);
     setIsBusy(true);
     setLoadError(null);
     setCurrentBook(null);
@@ -144,7 +143,10 @@ export default function Home() {
       const response = await fetch("/api/library/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: credentials.get("username"),
+          password: credentials.get("password"),
+        }),
       });
       const payload = (await response.json()) as SessionResponse;
       if (!response.ok) {
@@ -167,7 +169,6 @@ export default function Home() {
     setIsAuthenticated(false);
     setCatalog([]);
     setCurrentBook(null);
-    setPassword("");
     setLoadError(null);
   };
 
@@ -209,20 +210,22 @@ export default function Home() {
             <label>
               Email
               <input
+                id="login-username"
+                name="username"
                 type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
             </label>
             <label>
               Password
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
                 required
               />
             </label>
