@@ -21,7 +21,7 @@ The library, book cards and sign-in dialog follow the system light/dark appearan
 ## Requirements
 
 - Node.js 22
-- pnpm 11.12.0
+- pnpm 11.28.8
 
 ## Local development
 
