@@ -12,12 +12,38 @@ Set these optional repository **variables** under **Settings → Secrets and var
 
 Without these variables, CI uses the local defaults at `http://localhost:8080` (authentication at `/auth/login` and catalog at `/opds/publications`). These values are embedded in the client bundle at build time and are public; never store secrets in them. Release tags require all three values to be valid HTTPS URLs.
 
-Configure these repository **secrets** under **Settings → Secrets and variables → Actions → Secrets** for signed production releases:
+Create a GitHub **environment** named `release` under **Settings → Environments**. Configure required reviewers and deployment tag restrictions allowing only `v*` tags before adding credentials. Tag jobs use this environment; ordinary PR/main checks use a separate `ci` environment without signing secrets. The uploader checks that `release` exists but does not create it or change its protection rules.
 
-- macOS: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
-- Windows: `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`
+Use the same macOS secret names as `thorrsson/mac-resources-bar` and `thorrsson/kcb-swift`:
 
-`CSC_LINK` and `CSC_KEY_PASSWORD` are passed to electron-builder on macOS. On Windows, the `WIN_CSC_*` secrets are mapped to electron-builder's standard `CSC_LINK` and `CSC_KEY_PASSWORD` variables. `CSC_LINK` must point to the signing certificate in a format electron-builder accepts. Linux releases are unsigned.
+| Environment secret | Content |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | Single-line base64 Developer ID Application certificate **with its private key**, exported as password-protected PKCS#12 |
+| `MACOS_CERTIFICATE_PASSWORD` | Certificate export password |
+| `MACOS_SIGNING_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` |
+| `NOTARY_API_KEY_ID` | App Store Connect API key ID |
+| `NOTARY_API_ISSUER_ID` | App Store Connect API issuer ID |
+| `NOTARY_API_KEY_P8` | Single-line base64 contents of the API key `.p8` file |
+| `WIN_CSC_LINK` | Single-line base64 Windows Authenticode `.pfx`/`.p12` certificate with private key |
+| `WIN_CSC_KEY_PASSWORD` | Windows certificate export password |
+
+### Upload from a local dotenv file
+
+```bash
+cp .env.release.example .env.release
+chmod 600 .env.release
+# Fill in .env.release locally; never commit or share the populated file.
+bash scripts/setup-release-secrets.sh --env-file .env.release --dry-run
+bash scripts/setup-release-secrets.sh --env-file .env.release
+```
+
+The script defaults to `.env` for compatibility with the other projects' uploader. Pass `--env-file /path/to/existing/.env --repo thorrsson/tls-reader` to reuse an existing credentials file. It parses values literally without sourcing/evaluating the file, rejects unknown/duplicate keys and missing macOS credentials, and never prints secret values. Recognized Sparkle keys and `MACOS_TEAM_ID` are ignored with a names-only notice; TLS Reader does not use Sparkle. Backend `NEXT_PUBLIC_*` variables belong in repository Actions variables, not this credential file.
+
+The uploader requires authenticated `gh` access and sends values through stdin into the existing `release` environment. Windows secrets may be omitted while setting up macOS, but must be supplied as a pair if present; a full release remains blocked until Windows signing is configured. Upload failures identify the failed name and may leave earlier uploads in place; rerun after correcting the error. Dry-run with an explicit `--repo` works offline.
+
+GitHub cannot return existing secret values. Reuse your securely stored originals; a valid Developer ID Application identity can be reused across these apps. Do not use a Git commit signing key or an Apple Development certificate. Modern public Windows signing commonly requires cloud/HSM or hardware-backed signing: confirm exportable-certificate support with your provider before purchasing. Cloud/hardware providers require workflow changes rather than the current `WIN_CSC_*` file-based integration.
+
+The workflow maps the certificate and password to electron-builder's `CSC_LINK`/`CSC_KEY_PASSWORD`, and the macOS identity to `CSC_NAME`. It decodes the notarization key into a restricted temporary file, supplies `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, and removes the file when packaging exits. No Apple ID password or app-specific password is needed. Linux releases are unsigned.
 
 Tag builds fail before packaging if any required signing secret or backend URL is missing. Signing secrets are not passed to PR builds (including same-repository PRs), `main` builds, or Linux packaging. Only the matching macOS/Windows tag packaging step receives its signing credentials, and `--config.forceCodeSigning=true` prevents silently unsigned releases. Unsigned macOS builds are useful for CI validation, but are not production-ready for distribution or automatic updates.
 
@@ -36,7 +62,7 @@ Unsigned local macOS arm64 and universal DMG/ZIP builds have completed, includin
 
 [Native CI run 39342890436](https://github.com/thorrsson/tls-reader/actions/runs/39342890436) at commit `9c1ebce` passed on all three platforms: macOS universal DMG/ZIP, Windows x64 NSIS, and Linux x64 AppImage. Each native job passed all 29 tests, lint, typecheck, build, relocated standalone smoke, real Electron smoke against both staged and packaged resources, installer/metadata checks, and artifact upload.
 
-These checks exercise packaged resources with the development Electron executable, not the installed application binary. Live backend integration, signing, notarization, installed application execution, and end-to-end actual updates remain unverified. They do not demonstrate Intel macOS execution or a published release. No signing credentials are currently configured.
+These checks exercise packaged resources with the development Electron executable, not the installed application binary. Live authenticated backend integration, production signing, notarization and end-to-end actual updates remain unverified. They do not demonstrate Intel macOS execution or a published release. Configure the protected environment's credentials before attempting a release.
 
 ## Build locally
 

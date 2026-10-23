@@ -15,6 +15,7 @@ jobs:
   validate-release:
     name: Validate release configuration
     runs-on: ubuntu-latest
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'ci' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -28,11 +29,12 @@ jobs:
           NEXT_PUBLIC_TLS_API_BASE_URL: ${{ vars.NEXT_PUBLIC_TLS_API_BASE_URL }}
           NEXT_PUBLIC_TLS_AUTH_URL: ${{ vars.NEXT_PUBLIC_TLS_AUTH_URL }}
           NEXT_PUBLIC_TLS_CATALOG_URL: ${{ vars.NEXT_PUBLIC_TLS_CATALOG_URL }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
@@ -66,11 +68,12 @@ jobs:
           }
 
           const signingSecrets = [
-            "CSC_LINK",
-            "CSC_KEY_PASSWORD",
-            "APPLE_ID",
-            "APPLE_APP_SPECIFIC_PASSWORD",
-            "APPLE_TEAM_ID",
+            "MACOS_CERTIFICATE_P12",
+            "MACOS_CERTIFICATE_PASSWORD",
+            "MACOS_SIGNING_IDENTITY",
+            "NOTARY_API_KEY_ID",
+            "NOTARY_API_ISSUER_ID",
+            "NOTARY_API_KEY_P8",
             "WIN_CSC_LINK",
             "WIN_CSC_KEY_PASSWORD",
           ];
@@ -84,6 +87,7 @@ jobs:
   build:
     name: Build (${{ matrix.platform }})
     needs: validate-release
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'ci' }}
     strategy:
       fail-fast: false
       matrix:
@@ -176,12 +180,23 @@ jobs:
       - name: Package signed desktop release
         if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact != 'linux'
         env:
-          CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/v') && ((matrix.artifact == 'windows' && secrets.WIN_CSC_LINK) || (matrix.artifact == 'macos' && secrets.CSC_LINK)) || '' }}
-          CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && ((matrix.artifact == 'windows' && secrets.WIN_CSC_KEY_PASSWORD) || (matrix.artifact == 'macos' && secrets.CSC_KEY_PASSWORD)) || '' }}
-          APPLE_ID: ${{ startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'macos' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'macos' && secrets.APPLE_TEAM_ID || '' }}
-        run: pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=true --publish never
+          CSC_LINK: ${{ (matrix.artifact == 'windows' && secrets.WIN_CSC_LINK) || (matrix.artifact == 'macos' && secrets.MACOS_CERTIFICATE_P12) || '' }}
+          CSC_KEY_PASSWORD: ${{ (matrix.artifact == 'windows' && secrets.WIN_CSC_KEY_PASSWORD) || (matrix.artifact == 'macos' && secrets.MACOS_CERTIFICATE_PASSWORD) || '' }}
+          CSC_NAME: ${{ matrix.artifact == 'macos' && secrets.MACOS_SIGNING_IDENTITY || '' }}
+          APPLE_API_KEY_ID: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_ISSUER_ID || '' }}
+          NOTARY_API_KEY_P8: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_KEY_P8 || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            umask 077
+            export APPLE_API_KEY="$RUNNER_TEMP/notary-api-key.p8"
+            trap 'rm -f "$APPLE_API_KEY"' EXIT
+            printf '%s' "$NOTARY_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
+            test -s "$APPLE_API_KEY"
+          fi
+          pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=true --publish never
 
       - name: Smoke test packaged macOS resources
         if: runner.os == 'macOS'
