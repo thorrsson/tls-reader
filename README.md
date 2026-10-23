@@ -70,6 +70,10 @@ The pnpm dependency policy permits one pinned upstream Thorium Git locale depend
 
 Mobile applications are not included in this repository's desktop release workflow.
 
+## Documentation site
+
+User documentation will be available at [thorrsson.github.io/tls-reader](https://thorrsson.github.io/tls-reader/) after the first deployment. The `Pages` workflow builds the site for pull requests and deploys it when changes are pushed to `main`. To enable publishing, select **Settings → Pages → Build and deployment → GitHub Actions** in the repository.
+
 ## App icon
 
 The original bookshelf icon uses the TLS burgundy palette. Its editable source is `assets/icon.svg`; packaged macOS, Windows and Linux icons are checked into `assets/icons/`. Run `pnpm icons` after editing the SVG (macOS is required to regenerate the ICNS file).
