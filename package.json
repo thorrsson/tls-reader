@@ -6,7 +6,7 @@
   "author": "Tim Hunter",
   "license": "MIT",
   "main": "desktop/main.cjs",
-  "packageManager": "pnpm@11.12.0",
+  "packageManager": "pnpm@11.28.8",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
