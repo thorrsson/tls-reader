@@ -8,9 +8,10 @@ description: Install TLS Reader, sign in to your library, and read on your deskt
   <h1>Welcome to TLS Reader.</h1>
   <p>A simple desktop app for signing in to your TLS Library, browsing your available books, and reading with Thorium Web.</p>
   <div class="actions">
-    <a class="button" href="https://github.com/thorrsson/tls-reader/releases/latest">Download the latest release</a>
+    <a class="button" href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="auto">Download the latest release</a>
     <a class="button secondary" href="{{ '/getting-started/' | relative_url }}">Get started</a>
   </div>
+  <p><a href="https://github.com/thorrsson/tls-reader/releases/latest">All downloads and release notes</a></p>
 </section>
 
 ## Find your way around

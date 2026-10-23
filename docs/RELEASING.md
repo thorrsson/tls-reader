@@ -2,6 +2,8 @@
 
 The `Desktop CI and release` workflow checks and packages the desktop application on native runners for macOS, Windows, and Linux. Pull requests and pushes to `main` run tests, lint, typecheck, the desktop build, the relocated-reader smoke test, a real hidden Electron smoke, electron-builder packaging, and an Electron smoke against the packaged resources. These builds may be unsigned.
 
+Pull requests and `main` pushes skip this workflow when all changed files are under `docs/`, root-level Markdown files, or `test/pages-downloads.test.cjs`. Mixed changes that also touch application code, dependencies, other tests, or workflows still run desktop CI. Version tags always run release builds because GitHub does not apply path filters to tag pushes. GitHub Pages deployment is unaffected. Do not require desktop workflow checks unconditionally in branch protection: GitHub leaves path-filtered checks pending on skipped pull requests.
+
 ## Configure repository settings
 
 Set these optional repository **variables** under **Settings → Secrets and variables → Actions → Variables** to use a TLS backend in CI builds:

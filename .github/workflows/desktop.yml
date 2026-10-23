@@ -2,11 +2,19 @@ name: Desktop CI and release
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "test/pages-downloads.test.cjs"
   push:
     branches:
       - main
     tags:
       - "v*"
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "test/pages-downloads.test.cjs"
 
 permissions:
   contents: read
