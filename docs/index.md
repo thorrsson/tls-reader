@@ -6,7 +6,7 @@ description: Install TLS Reader, sign in to your library, and read on your deskt
 <section class="hero">
   <p class="eyebrow">Your library, on your desktop</p>
   <h1>Welcome to TLS Reader.</h1>
-  <p>A simple desktop app for signing in to your TLS Library, browsing your available books, and reading with Thorium Web.</p>
+  <p>A simple desktop app for signing in to your TLS Library, browsing and reading your available books.</p>
   <div class="actions">
     <a class="button" href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="auto">Download the latest release</a>
     <a class="button secondary" href="{{ '/getting-started/' | relative_url }}">Get started</a>
