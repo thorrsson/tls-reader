@@ -48,7 +48,7 @@ test('dotenv importer validates macOS secrets offline without printing values or
   assert.equal(result.calls, '');
   for (const name of macNames) assert.ok(result.stdout.includes(`Would set secret ${name}`));
   assert.ok(result.stdout.includes('Ignoring unused setting SPARKLE_PRIVATE_ED_KEY'));
-  assert.ok(result.stdout.includes('full release tags remain blocked'));
+  assert.ok(result.stdout.includes('Windows installers will be unsigned'));
   assert.ok(!result.stdout.includes('synthetic-'));
   assert.ok(!result.stdout.includes('do-not-upload'));
 });
@@ -106,4 +106,58 @@ test('release workflow maps existing macOS secret names behind protected environ
   }
   const template = fs.readFileSync('.env.release.example', 'utf8');
   for (const name of macNames) assert.ok(template.includes(`${name}=`));
+});
+
+test('release validation permits absent Windows credentials but requires macOS and complete Windows pairs', () => {
+  const workflow = fs.readFileSync('.github/workflows/desktop.yml', 'utf8');
+  const source = workflow.match(/node <<'NODE'\n([\s\S]*?)\n          NODE/)[1]
+    .split('\n').map(line => line.replace(/^          /, '')).join('\n');
+  const env = {
+    RELEASE_TAG: `v${require('../package.json').version}`,
+    NEXT_PUBLIC_TLS_API_BASE_URL: 'https://example.com',
+    NEXT_PUBLIC_TLS_AUTH_URL: 'https://example.com/auth/login',
+    NEXT_PUBLIC_TLS_CATALOG_URL: 'https://example.com/opds/publications',
+    ...Object.fromEntries(macNames.map(name => [name, 'synthetic'])),
+  };
+  const validate = extra => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', env: { ...env, ...extra } });
+  assert.equal(validate({}).status, 0);
+  assert.equal(validate({ WIN_CSC_LINK: 'cert', WIN_CSC_KEY_PASSWORD: 'password' }).status, 0);
+  for (const extra of [
+    { WIN_CSC_LINK: 'cert' }, { WIN_CSC_KEY_PASSWORD: 'password' },
+    { MACOS_CERTIFICATE_P12: '' }, { NOTARY_API_KEY_P8: '' },
+  ]) assert.notEqual(validate(extra).status, 0);
+});
+
+test('Windows release warns only for absent credentials and never downgrades signing failures', shellTest, () => {
+  const workflow = fs.readFileSync('.github/workflows/desktop.yml', 'utf8');
+  const step = workflow.split('      - name: Package Windows release\n')[1].split('\n      - name:')[0];
+  const script = step.split('        run: |\n')[1].split('\n')
+    .map(line => line.replace(/^          /, '')).join('\n');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-windows-release-'));
+  try {
+    fs.writeFileSync(path.join(root, 'pnpm'), '#!/bin/bash\nprintf "%s\\n" "$*"\nexit "${TEST_BUILD_STATUS:-0}"\n', { mode: 0o700 });
+    const build = (cert, password, status = '0') => spawnSync('bash', ['-c', script], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${root}${path.delimiter}${process.env.PATH}`,
+        CSC_LINK: cert, CSC_KEY_PASSWORD: password, TEST_BUILD_STATUS: status },
+    });
+    const unsigned = build('', '');
+    assert.equal(unsigned.status, 0, unsigned.stderr);
+    assert.match(unsigned.stdout, /::warning::.*unsigned installer/);
+    assert.match(unsigned.stdout, /forceCodeSigning=false/);
+    const signed = build('cert', 'password');
+    assert.equal(signed.status, 0, signed.stderr);
+    assert.match(signed.stdout, /forceCodeSigning=true/);
+    assert.ok(!signed.stdout.includes('::warning::'));
+    for (const pair of [['cert', ''], ['', 'password']]) {
+      const incomplete = build(...pair);
+      assert.notEqual(incomplete.status, 0);
+      assert.ok(!incomplete.stdout.includes('exec electron-builder'));
+    }
+    const failed = build('invalid-cert', 'password', '17');
+    assert.equal(failed.status, 17);
+    assert.ok(!failed.stdout.includes('forceCodeSigning=false'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

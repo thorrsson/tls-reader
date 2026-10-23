@@ -22,7 +22,7 @@ Accepts one-line KEY=value entries, optional export prefixes, surrounding quotes
 blank lines and whole-line comments. Values are literal: no shell execution,
 interpolation, escape expansion or inline comments. Encode .p12/.p8 as single-line
 base64. Unknown/duplicate keys are errors. macOS secrets are required; Windows
-secrets must be supplied together if present. Full releases require Windows too.
+secrets must be supplied together if present; otherwise Windows releases unsigned.
 Sparkle keys from the other projects are recognized but NOT uploaded or used.
 USAGE
 }
@@ -96,7 +96,7 @@ for name in "${optional_secrets[@]}"; do
 done
 [[ "${windows_count}" != 1 ]] || die "WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD must be supplied together."
 if [[ "${windows_count}" == 0 ]]; then
-    printf 'Windows signing not supplied; full release tags remain blocked until configured.\n'
+    printf 'Windows signing not supplied; Windows installers will be unsigned (SmartScreen warnings may appear).\n'
 fi
 
 export GH_PROMPT_DISABLED=1

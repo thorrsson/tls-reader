@@ -74,12 +74,14 @@ jobs:
             "NOTARY_API_KEY_ID",
             "NOTARY_API_ISSUER_ID",
             "NOTARY_API_KEY_P8",
-            "WIN_CSC_LINK",
-            "WIN_CSC_KEY_PASSWORD",
           ];
           const missingSecrets = signingSecrets.filter((name) => !process.env[name]);
           if (missingSecrets.length > 0) {
             console.error(`Release signing credentials are missing: ${missingSecrets.join(", ")}.`);
+            process.exitCode = 1;
+          }
+          if (Boolean(process.env.WIN_CSC_LINK) !== Boolean(process.env.WIN_CSC_KEY_PASSWORD)) {
+            console.error("WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD must be supplied together, or both omitted for unsigned Windows releases.");
             process.exitCode = 1;
           }
           NODE
@@ -177,15 +179,34 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/v') || matrix.artifact == 'linux'"
         run: pnpm exec electron-builder --config electron-builder.yml --publish never
 
-      - name: Package signed desktop release
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact != 'linux'
+      - name: Package Windows release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'windows'
         env:
-          CSC_LINK: ${{ (matrix.artifact == 'windows' && secrets.WIN_CSC_LINK) || (matrix.artifact == 'macos' && secrets.MACOS_CERTIFICATE_P12) || '' }}
-          CSC_KEY_PASSWORD: ${{ (matrix.artifact == 'windows' && secrets.WIN_CSC_KEY_PASSWORD) || (matrix.artifact == 'macos' && secrets.MACOS_CERTIFICATE_PASSWORD) || '' }}
-          CSC_NAME: ${{ matrix.artifact == 'macos' && secrets.MACOS_SIGNING_IDENTITY || '' }}
-          APPLE_API_KEY_ID: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_ISSUER_ID || '' }}
-          NOTARY_API_KEY_P8: ${{ matrix.artifact == 'macos' && secrets.NOTARY_API_KEY_P8 || '' }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]]; then
+            pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=true --publish never
+          elif [[ -n "$CSC_LINK" || -n "$CSC_KEY_PASSWORD" ]]; then
+            echo "::error::WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD must be supplied together."
+            exit 1
+          else
+            echo "::warning::No Windows signing certificate is configured; publishing an unsigned installer. Users may see SmartScreen or unknown-publisher warnings."
+            unset CSC_LINK CSC_KEY_PASSWORD
+            pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=false --publish never
+          fi
+
+      - name: Package signed macOS release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'macos'
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CSC_NAME: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
         shell: bash
         run: |
           set -euo pipefail
