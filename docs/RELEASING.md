@@ -47,6 +47,8 @@ GitHub cannot return existing secret values. Reuse your securely stored original
 
 The workflow maps the certificate and password to electron-builder's `CSC_LINK`/`CSC_KEY_PASSWORD`, and the macOS identity to `CSC_NAME`. It decodes the notarization key into a restricted temporary file, supplies `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, and removes the file when packaging exits. No Apple ID password or app-specific password is needed. Linux releases are unsigned.
 
+`app-builder-lib@26.15.3` has a pinned pnpm patch for [electron-builder#10066](https://github.com/electron-userland/electron-builder/issues/10066). It passes the generated temporary-keychain password to `security set-key-partition-list -k`, while retaining the certificate export password for `security import -P`. Without this upstream fix, signing can fail with `SecKeychainUnlock` even after the certificate imports successfully. Remove the patch when upgrading to a release containing the fix; do not change certificate secrets to work around this keychain error.
+
 Tag builds fail before packaging if any required macOS signing/notarization secret or backend URL is missing. Signing secrets are not passed to PR builds (including same-repository PRs), `main` builds, or Linux packaging. Only the matching macOS/Windows tag packaging step receives its signing credentials. macOS always uses `--config.forceCodeSigning=true`; Windows uses it when signing credentials are configured, and explicitly disables the requirement only when both Windows secrets are absent. Unsigned macOS builds are useful for CI validation, but are not production-ready for distribution or automatic updates.
 
 ## Create a release

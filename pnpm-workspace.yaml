@@ -10,3 +10,5 @@ overrides:
   '@edrlab/thorium-locales': https://codeload.github.com/edrlab/thorium-locales/tar.gz/b416fdb5cfa7ade7562fe108550e3b566857a7b1
 # Thorium ships its locale dependency from GitHub; pin it above and lock integrity.
 blockExoticSubdeps: false
+patchedDependencies:
+  app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch
