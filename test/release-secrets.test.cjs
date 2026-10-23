@@ -108,10 +108,31 @@ test('release workflow maps existing macOS secret names behind protected environ
   for (const name of macNames) assert.ok(template.includes(`${name}=`));
 });
 
-test('release validation permits absent Windows credentials but requires macOS and complete Windows pairs', () => {
-  const workflow = fs.readFileSync('.github/workflows/desktop.yml', 'utf8');
+function validationSource(workflow) {
+  workflow = workflow.replace(/\r\n/g, '\n');
   const source = workflow.match(/node <<'NODE'\n([\s\S]*?)\n          NODE/)[1]
     .split('\n').map(line => line.replace(/^          /, '')).join('\n');
+  return source;
+}
+
+function windowsPackagingSource(workflow) {
+  workflow = workflow.replace(/\r\n/g, '\n');
+  const step = workflow.split('      - name: Package Windows release\n')[1].split('\n      - name:')[0];
+  return step.split('        run: |\n')[1].split('\n')
+    .map(line => line.replace(/^          /, '')).join('\n');
+}
+
+test('workflow script extraction supports both LF and Windows CRLF checkouts', () => {
+  const lf = fs.readFileSync('.github/workflows/desktop.yml', 'utf8').replace(/\r\n/g, '\n');
+  const crlf = lf.replace(/\n/g, '\r\n');
+  for (const extract of [validationSource, windowsPackagingSource]) {
+    assert.ok(extract(lf).length > 0);
+    assert.equal(extract(crlf), extract(lf));
+  }
+});
+
+test('release validation permits absent Windows credentials but requires macOS and complete Windows pairs', () => {
+  const source = validationSource(fs.readFileSync('.github/workflows/desktop.yml', 'utf8'));
   const env = {
     RELEASE_TAG: `v${require('../package.json').version}`,
     NEXT_PUBLIC_TLS_API_BASE_URL: 'https://example.com',
@@ -129,10 +150,7 @@ test('release validation permits absent Windows credentials but requires macOS a
 });
 
 test('Windows release warns only for absent credentials and never downgrades signing failures', shellTest, () => {
-  const workflow = fs.readFileSync('.github/workflows/desktop.yml', 'utf8');
-  const step = workflow.split('      - name: Package Windows release\n')[1].split('\n      - name:')[0];
-  const script = step.split('        run: |\n')[1].split('\n')
-    .map(line => line.replace(/^          /, '')).join('\n');
+  const script = windowsPackagingSource(fs.readFileSync('.github/workflows/desktop.yml', 'utf8'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-windows-release-'));
   try {
     fs.writeFileSync(path.join(root, 'pnpm'), '#!/bin/bash\nprintf "%s\\n" "$*"\nexit "${TEST_BUILD_STATUS:-0}"\n', { mode: 0o700 });
