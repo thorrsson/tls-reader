@@ -1,0 +1,305 @@
+name: Desktop CI and release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release:
+    name: Validate release configuration
+    runs-on: ubuntu-latest
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'ci' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate release tag, backend URLs, and signing credentials
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          NEXT_PUBLIC_TLS_API_BASE_URL: ${{ vars.NEXT_PUBLIC_TLS_API_BASE_URL }}
+          NEXT_PUBLIC_TLS_AUTH_URL: ${{ vars.NEXT_PUBLIC_TLS_AUTH_URL }}
+          NEXT_PUBLIC_TLS_CATALOG_URL: ${{ vars.NEXT_PUBLIC_TLS_CATALOG_URL }}
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          node <<'NODE'
+          const { version } = require("./package.json");
+          const expectedTag = `v${version}`;
+          if (process.env.RELEASE_TAG !== expectedTag) {
+            console.error(`Release tag must exactly match the package version (${expectedTag}).`);
+            process.exit(1);
+          }
+
+          const backendVariables = [
+            "NEXT_PUBLIC_TLS_API_BASE_URL",
+            "NEXT_PUBLIC_TLS_AUTH_URL",
+            "NEXT_PUBLIC_TLS_CATALOG_URL",
+          ];
+          for (const name of backendVariables) {
+            const value = process.env[name];
+            let url;
+            try {
+              url = new URL(value);
+            } catch {
+              console.error(`${name} must be a valid HTTPS URL for a release.`);
+              process.exitCode = 1;
+              continue;
+            }
+            if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+              console.error(`${name} must be an HTTPS URL without embedded credentials for a release.`);
+              process.exitCode = 1;
+            }
+          }
+
+          const signingSecrets = [
+            "MACOS_CERTIFICATE_P12",
+            "MACOS_CERTIFICATE_PASSWORD",
+            "MACOS_SIGNING_IDENTITY",
+            "NOTARY_API_KEY_ID",
+            "NOTARY_API_ISSUER_ID",
+            "NOTARY_API_KEY_P8",
+          ];
+          const missingSecrets = signingSecrets.filter((name) => !process.env[name]);
+          if (missingSecrets.length > 0) {
+            console.error(`Release signing credentials are missing: ${missingSecrets.join(", ")}.`);
+            process.exitCode = 1;
+          }
+          if (Boolean(process.env.WIN_CSC_LINK) !== Boolean(process.env.WIN_CSC_KEY_PASSWORD)) {
+            console.error("WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD must be supplied together, or both omitted for unsigned Windows releases.");
+            process.exitCode = 1;
+          }
+          NODE
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: validate-release
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'ci' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS universal
+            runner: macos-latest
+            artifact: macos
+          - platform: Windows x64
+            runner: windows-latest
+            artifact: windows
+          - platform: Linux x64
+            runner: ubuntu-latest
+            artifact: linux
+    runs-on: ${{ matrix.runner }}
+    env:
+      NEXT_PUBLIC_TLS_API_BASE_URL: ${{ vars.NEXT_PUBLIC_TLS_API_BASE_URL || 'http://localhost:8080' }}
+      NEXT_PUBLIC_TLS_AUTH_URL: ${{ vars.NEXT_PUBLIC_TLS_AUTH_URL || 'http://localhost:8080/auth/login' }}
+      NEXT_PUBLIC_TLS_CATALOG_URL: ${{ vars.NEXT_PUBLIC_TLS_CATALOG_URL || 'http://localhost:8080/opds/publications' }}
+      NEXT_PUBLIC_TLS_BASE_READER_URL: ""
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Verify Electron binary
+        run: node -e "const fs = require('node:fs'); const binary = require('electron'); if (typeof binary !== 'string' || !fs.statSync(binary).isFile()) { throw new Error('Electron binary must be an existing file'); }"
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build desktop reader
+        run: pnpm desktop:build
+
+      - name: Smoke test relocated standalone reader
+        run: pnpm smoke
+
+      - name: Smoke test Electron runtime
+        if: runner.os != 'Linux'
+        timeout-minutes: 3
+        run: pnpm exec electron desktop/smoke.cjs
+
+      - name: Check Linux Electron runtime dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          command -v xvfb-run
+          command -v xauth
+          electron_binary="$(node -p "require('electron')")"
+          test -f "$electron_binary"
+          dependencies="$(ldd "$electron_binary")"
+          if grep -q 'not found' <<< "$dependencies"; then
+            printf '%s\n' "$dependencies"
+            exit 1
+          fi
+
+      - name: Smoke test Electron runtime on Linux CI
+        if: runner.os == 'Linux'
+        timeout-minutes: 3
+        run: xvfb-run --auto-servernum pnpm exec electron --no-sandbox desktop/smoke.cjs
+
+      - name: Package unsigned desktop application
+        if: "!startsWith(github.ref, 'refs/tags/v') || matrix.artifact == 'linux'"
+        run: pnpm exec electron-builder --config electron-builder.yml --publish never
+
+      - name: Package Windows release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'windows'
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]]; then
+            pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=true --publish never
+          elif [[ -n "$CSC_LINK" || -n "$CSC_KEY_PASSWORD" ]]; then
+            echo "::error::WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD must be supplied together."
+            exit 1
+          else
+            echo "::warning::No Windows signing certificate is configured; publishing an unsigned installer. Users may see SmartScreen or unknown-publisher warnings."
+            unset CSC_LINK CSC_KEY_PASSWORD
+            pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=false --publish never
+          fi
+
+      - name: Package signed macOS release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.artifact == 'macos'
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CSC_NAME: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            umask 077
+            export APPLE_API_KEY="$RUNNER_TEMP/notary-api-key.p8"
+            trap 'rm -f "$APPLE_API_KEY"' EXIT
+            printf '%s' "$NOTARY_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
+            test -s "$APPLE_API_KEY"
+          fi
+          pnpm exec electron-builder --config electron-builder.yml --config.forceCodeSigning=true --publish never
+
+      - name: Smoke test packaged macOS resources
+        if: runner.os == 'macOS'
+        timeout-minutes: 3
+        run: pnpm exec electron desktop/smoke.cjs --packaged-resources="dist/mac-universal/TLS Reader.app/Contents/Resources"
+
+      - name: Smoke test packaged Windows resources
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        run: pnpm exec electron desktop/smoke.cjs --packaged-resources="dist/win-unpacked/resources"
+
+      - name: Smoke test packaged Linux resources
+        if: runner.os == 'Linux'
+        timeout-minutes: 3
+        run: xvfb-run --auto-servernum pnpm exec electron --no-sandbox desktop/smoke.cjs --packaged-resources="dist/linux-unpacked/resources"
+
+      - name: Verify installers and updater metadata
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.artifact }}
+        run: |
+          node <<'NODE'
+          const { readdirSync, statSync } = require("node:fs");
+          const files = readdirSync("dist").filter((name) => statSync(`dist/${name}`).isFile() && statSync(`dist/${name}`).size > 0);
+          const required = {
+            macos: [/\.dmg$/, /\.zip$/, /\.blockmap$/, /^latest-mac\.yml$/],
+            windows: [/\.exe$/, /\.blockmap$/, /^latest\.yml$/],
+            linux: [/\.AppImage$/, /^latest-linux\.yml$/],
+          }[process.env.PLATFORM];
+          const missing = required.filter((pattern) => !files.some((name) => pattern.test(name)));
+          if (missing.length) {
+            console.error(`Missing or empty ${process.env.PLATFORM} release assets: ${missing.join(", ")}`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Upload desktop installers and updater metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.blockmap
+            dist/latest*.yml
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - validate-release
+      - build
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: thorrsson/tls-reader
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers and updater metadata
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create draft release and upload all assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --draft \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --notes "TLS Reader desktop release $RELEASE_TAG."
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

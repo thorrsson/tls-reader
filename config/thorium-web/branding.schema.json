@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thorrsson.github.io/tls-reader/schemas/thorium-web-branding.schema.json",
+  "title": "Thorium Web Branding Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "brand",
+    "theme",
+    "typography",
+    "spacing",
+    "assets",
+    "actions",
+    "authHandoff",
+    "library"
+  ],
+  "properties": {
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 2 },
+        "name": { "type": "string", "minLength": 2 }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colors"],
+      "properties": {
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "background",
+            "surface",
+            "surfaceAlt",
+            "textPrimary",
+            "textSecondary",
+            "border",
+            "focus",
+            "accent",
+            "accentText",
+            "danger",
+            "warning",
+            "success"
+          ],
+          "properties": {
+            "background": { "type": "string" },
+            "surface": { "type": "string" },
+            "surfaceAlt": { "type": "string" },
+            "textPrimary": { "type": "string" },
+            "textSecondary": { "type": "string" },
+            "border": { "type": "string" },
+            "focus": { "type": "string" },
+            "accent": { "type": "string" },
+            "accentText": { "type": "string" },
+            "danger": { "type": "string" },
+            "warning": { "type": "string" },
+            "success": { "type": "string" }
+          }
+        }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fontFamilyBase",
+        "fontFamilyHeading",
+        "fontSizeBase",
+        "fontScale",
+        "lineHeightBase",
+        "fontWeightRegular",
+        "fontWeightMedium",
+        "fontWeightBold"
+      ],
+      "properties": {
+        "fontFamilyBase": { "type": "string" },
+        "fontFamilyHeading": { "type": "string" },
+        "fontSizeBase": { "type": "number", "exclusiveMinimum": 0 },
+        "fontScale": { "type": "number", "minimum": 1 },
+        "lineHeightBase": { "type": "number", "exclusiveMinimum": 1 },
+        "fontWeightRegular": { "type": "integer", "minimum": 300, "maximum": 500 },
+        "fontWeightMedium": { "type": "integer", "minimum": 500, "maximum": 700 },
+        "fontWeightBold": { "type": "integer", "minimum": 600, "maximum": 900 }
+      }
+    },
+    "spacing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "xs",
+        "sm",
+        "md",
+        "lg",
+        "xl",
+        "radiusSm",
+        "radiusMd",
+        "radiusLg"
+      ],
+      "properties": {
+        "unit": { "type": "integer", "minimum": 1 },
+        "xs": { "type": "integer", "minimum": 1 },
+        "sm": { "type": "integer", "minimum": 1 },
+        "md": { "type": "integer", "minimum": 1 },
+        "lg": { "type": "integer", "minimum": 1 },
+        "xl": { "type": "integer", "minimum": 1 },
+        "radiusSm": { "type": "integer", "minimum": 0 },
+        "radiusMd": { "type": "integer", "minimum": 0 },
+        "radiusLg": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logo"],
+      "properties": {
+        "logo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["src", "alt"],
+          "properties": {
+            "src": { "type": "string", "minLength": 1 },
+            "alt": { "type": "string", "minLength": 1 },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "visibility"],
+      "properties": {
+        "order": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "openLibrary",
+              "openCatalog",
+              "download",
+              "readNow",
+              "returnLoan",
+              "renewLoan",
+              "account",
+              "signOut"
+            ]
+          }
+        },
+        "visibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "openLibrary",
+            "openCatalog",
+            "download",
+            "readNow",
+            "returnLoan",
+            "renewLoan",
+            "account",
+            "signOut"
+          ],
+          "properties": {
+            "openLibrary": { "type": "boolean" },
+            "openCatalog": { "type": "boolean" },
+            "download": { "type": "boolean" },
+            "readNow": { "type": "boolean" },
+            "returnLoan": { "type": "boolean" },
+            "renewLoan": { "type": "boolean" },
+            "account": { "type": "boolean" },
+            "signOut": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "authHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "loginEndpoint",
+        "entitlementsEndpoint",
+        "acquireEndpointTemplate",
+        "tokenTransport",
+        "tokenTtlSkewSeconds"
+      ],
+      "properties": {
+        "loginEndpoint": { "type": "string", "minLength": 1 },
+        "entitlementsEndpoint": { "type": "string", "minLength": 1 },
+        "acquireEndpointTemplate": { "type": "string", "minLength": 1 },
+        "tokenTransport": {
+          "type": "string",
+          "enum": ["bearerHeader", "queryParam"]
+        },
+        "tokenTtlSkewSeconds": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "requireEntitlement", "maxItems"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["entitlements", "opds", "hybrid"]
+        },
+        "requireEntitlement": { "type": "boolean" },
+        "maxItems": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
