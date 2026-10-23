@@ -1,0 +1,13 @@
+title: TLS Reader
+description: Help for installing and using the TLS Reader desktop app.
+url: https://thorrsson.github.io
+baseurl: /tls-reader
+markdown: kramdown
+exclude:
+  - RELEASING.md
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: default
