@@ -7,11 +7,15 @@ Download and install TLS Reader, then sign in to load your library.
 
 ## 1. Download the app
 
-Open the [latest TLS Reader release](https://github.com/thorrsson/tls-reader/releases/latest) and download the installer for your operating system:
+<p><a class="button" href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="auto">Download the latest release</a></p>
 
-- **macOS:** Open the DMG and move TLS Reader to Applications.
-- **Windows:** Download and run the x64 installer.
-- **Linux:** Download the x64 AppImage, make it executable if your desktop does not do so automatically, then launch it.
+The download button detects your desktop operating system and links directly to its installer from the latest published release. macOS uses a universal installer for Intel and Apple silicon; Windows and Linux installers are x64. To choose a different system:
+
+- **macOS:** <a href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="mac">Download the DMG</a>, open it, and move TLS Reader to Applications.
+- **Windows:** <a href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="windows">Download the x64 EXE installer</a> and run it.
+- **Linux:** <a href="https://github.com/thorrsson/tls-reader/releases/latest" data-download="linux">Download the x64 AppImage</a>, make it executable if your desktop does not do so automatically, then launch it.
+
+On mobile devices or unrecognized systems, or if the latest installer cannot be resolved, the button opens the release page instead. You can always browse [all downloads and release notes](https://github.com/thorrsson/tls-reader/releases/latest). JavaScript must be enabled to resolve direct installer links.
 
 Release assets and operating-system security warnings may vary by version. Only download TLS Reader from the project's official GitHub releases.
 
