@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, Menu, clipboard, ipcMain, utilityProcess } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, ipcMain, nativeTheme, utilityProcess } = require('electron');
 const packagedResourcesArg = process.argv.find((arg) => arg.startsWith('--packaged-resources='));
 const packagedResources = packagedResourcesArg
   ? path.resolve(packagedResourcesArg.slice('--packaged-resources='.length))
@@ -38,6 +38,7 @@ async function run() {
   let menuState;
   let commandBridge;
   let fixtureServer;
+  const originalTheme = nativeTheme.themeSource;
   const testClipboard = process.env.CI === 'true';
   const runtime = new ReaderServerRuntime({
     sourceDir: packagedResources
@@ -108,6 +109,40 @@ async function run() {
     assert.equal(page.nodeExposed, false, 'renderer must not expose Node globals');
     assert.equal(menuState.authenticated, false);
     assert.equal(menuState.busy, false);
+    async function assertAppearance(dark, selectors) {
+      nativeTheme.themeSource = dark ? 'dark' : 'light';
+      const deadline = Date.now() + 3000;
+      let appearance;
+      do {
+        appearance = await window.webContents.executeJavaScript(`({
+          dark: matchMedia('(prefers-color-scheme: dark)').matches,
+          surfaces: ${JSON.stringify(selectors)}.map(selector => {
+            const element = document.querySelector(selector);
+            if (!element) return null;
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, color: style.color, scheme: style.colorScheme };
+          })
+        })`);
+        if (appearance.dark === dark && appearance.surfaces.every(surface => surface?.scheme === (dark ? 'dark' : 'light'))) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } while (Date.now() < deadline);
+      assert.equal(appearance.dark, dark, 'appearance must follow native system preference');
+      for (const surface of appearance.surfaces) {
+        assert.ok(surface, 'themed surface must exist');
+        assert.equal(surface.scheme, dark ? 'dark' : 'light');
+        const rgb = value => value.match(/\d+/g).slice(0, 3).map(Number);
+        const brightness = value => rgb(value).reduce((sum, channel) => sum + channel, 0) / 3;
+        if (dark) {
+          assert.ok(brightness(surface.background) < 65, `dark surface must not flash white: ${surface.background}`);
+          assert.ok(brightness(surface.color) > 170, 'dark text must remain readable');
+        }
+      }
+      return appearance;
+    }
+    const loginSurfaces = ['.thorium-app', '.desktop-login', '.auth-form', '#login-password'];
+    await assertAppearance(true, loginSurfaces);
+    await assertAppearance(false, loginSurfaces);
+    await assertAppearance(true, loginSurfaces);
     assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('.thorium-toolbar'))"), false);
     await window.webContents.executeJavaScript("document.querySelector('dialog').close()");
     commandBridge.send('sign-in');
@@ -193,6 +228,11 @@ async function run() {
     commandBridge.send('view-list');
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.equal(menuState.catalogView, 'list');
+    const librarySurfaces = ['.catalog-list', '.catalog-row-list li', '.book-cover-placeholder'];
+    await assertAppearance(true, librarySurfaces);
+    const lightLibrary = await assertAppearance(false, librarySurfaces);
+    assert.equal(lightLibrary.surfaces[0].background, 'rgb(255, 255, 255)');
+    await assertAppearance(true, librarySurfaces);
     assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('.catalog-view-toggle'))"), false);
     await window.webContents.executeJavaScript("document.querySelector('.catalog-row-list li button').click()");
     const readerDeadline = Date.now() + 30_000;
@@ -200,6 +240,11 @@ async function run() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert.equal(menuState.readerReady, true, 'synthetic publication must enable native reading commands');
+    const readingBackground = await window.webContents.executeJavaScript("getComputedStyle(document.querySelector('.thorium-runtime')).backgroundColor");
+    nativeTheme.themeSource = 'light';
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(await window.webContents.executeJavaScript("getComputedStyle(document.querySelector('.thorium-runtime')).backgroundColor"),
+      readingBackground, 'system appearance must not override reading canvas');
     commandBridge.send('reading-settings');
     await new Promise(resolve => setTimeout(resolve, 200));
     assert.equal(await window.webContents.executeJavaScript("Boolean(document.querySelector('[role=\"dialog\"]'))"), true,
@@ -238,6 +283,7 @@ async function run() {
     }
     await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     if (testClipboard) clipboard.clear();
+    nativeTheme.themeSource = originalTheme;
     clearTimeout(deadline);
   }
   if (failure) throw failure;

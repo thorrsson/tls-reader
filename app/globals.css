@@ -1,5 +1,44 @@
+:root,
+.thorium-app {
+  color-scheme: light;
+  --tls-page-background: var(--tls-brand-background, #65182d);
+  --tls-surface: var(--tls-brand-surface, #fff);
+  --tls-surface-alt: var(--tls-brand-surface-alt, #ece7e1);
+  --tls-border: var(--tls-brand-border, #d2d5d0);
+  --tls-text: var(--tls-brand-text, #19181d);
+  --tls-text-secondary: var(--tls-brand-text-secondary, #65182d);
+  --tls-accent: var(--tls-brand-accent, #65182d);
+  --tls-accent-text: var(--tls-brand-accent-text, #fff);
+  --tls-muted: #475467;
+  --tls-placeholder: #f2f2f2;
+  --tls-danger: #b42318;
+  --tls-danger-surface: #fff6f6;
+  --tls-focus: #b52650;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root,
+  .thorium-app {
+    color-scheme: dark;
+    --tls-page-background: #17151b;
+    --tls-surface: #211e26;
+    --tls-surface-alt: #2c2731;
+    --tls-border: #574c5d;
+    --tls-text: #f4edf3;
+    --tls-text-secondary: #d5c4d0;
+    --tls-accent: #f1a7bf;
+    --tls-accent-text: #321320;
+    --tls-muted: #c3b7c7;
+    --tls-placeholder: #332e39;
+    --tls-danger: #ffb4ab;
+    --tls-danger-surface: #3d2126;
+    --tls-focus: #f1a7bf;
+  }
+}
+
 html {
   height: 100%;
+  background: var(--tls-page-background);
 }
 
 html,
@@ -32,6 +71,7 @@ body.tls-reader-active {
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--tls-page-background, #f5f5f5);
+  color: var(--tls-text);
 }
 
 .thorium-app-reading {
@@ -62,7 +102,7 @@ body.tls-reader-active {
 }
 
 .desktop-welcome {
-  color: var(--tls-accent-text);
+  color: #fff;
   text-align: center;
 }
 
@@ -170,10 +210,10 @@ body.tls-reader-active {
   margin: 10px auto 0;
   width: min(560px, calc(100% - 32px));
   padding: 10px 12px;
-  border: 1px solid #b42318;
+  border: 1px solid var(--tls-danger);
   border-radius: 8px;
-  color: #b42318;
-  background: #fff6f6;
+  color: var(--tls-danger);
+  background: var(--tls-danger-surface);
   font-size: 0.92rem;
   line-height: 1.35;
 }
@@ -209,8 +249,8 @@ body.tls-reader-active {
 }
 
 .catalog-view-toggle .is-active {
-  background: #65182d;
-  border-color: #65182d;
+  background: var(--tls-accent);
+  border-color: var(--tls-accent);
 }
 
 .auth-shell {
@@ -224,7 +264,8 @@ body.tls-reader-active {
   border: 1px solid var(--tls-border, #d2d5d0);
   border-radius: 10px;
   padding: 18px;
-  background: #fff;
+  background: var(--tls-surface);
+  color: var(--tls-text);
   display: grid;
   gap: 12px;
 }
@@ -244,6 +285,13 @@ body.tls-reader-active {
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 0.95rem;
+  background: var(--tls-surface-alt);
+  color: var(--tls-text);
+}
+
+.thorium-app :is(input, button):focus-visible {
+  outline: 2px solid var(--tls-focus);
+  outline-offset: 3px;
 }
 
 .catalog-list ul {
@@ -262,7 +310,7 @@ body.tls-reader-active {
   padding: 10px;
   display: grid;
   gap: 10px;
-  background: #fff;
+  background: var(--tls-surface-alt);
 }
 
 .catalog-row-list {
@@ -278,7 +326,7 @@ body.tls-reader-active {
   border: 1px solid var(--tls-border, #d2d5d0);
   border-radius: 10px;
   padding: 8px;
-  background: #fff;
+  background: var(--tls-surface-alt);
 }
 
 .catalog-row-list .book-meta {
@@ -313,9 +361,9 @@ body.tls-reader-active {
 .book-cover-placeholder {
   display: grid;
   place-items: center;
-  color: #6b6872;
+  color: var(--tls-muted);
   font-size: 0.8rem;
-  background: #f2f2f2;
+  background: var(--tls-placeholder);
 }
 
 .book-meta {
@@ -331,7 +379,7 @@ body.tls-reader-active {
 
 .book-author {
   font-size: 0.82rem;
-  color: #475467;
+  color: var(--tls-muted);
 }
 
 .empty-library {
@@ -348,5 +396,5 @@ body.tls-reader-active {
 }
 
 .reader-status-error {
-  color: #b42318;
+  color: var(--tls-danger);
 }

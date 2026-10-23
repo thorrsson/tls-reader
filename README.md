@@ -16,6 +16,8 @@ The desktop window keeps the book or library in the content pane. **Account** op
 
 The sandboxed preload exposes only named menu commands and bounded UI state. The main process accepts state only from the local application's top-level frame; it exposes no filesystem, credential, navigation or arbitrary IPC methods. The standalone web app retains its on-page controls.
 
+The library, book cards and sign-in dialog follow the system light/dark appearance automatically, including live changes. This does not override the book's independent Thorium reading-theme preferences.
+
 ## Requirements
 
 - Node.js 22

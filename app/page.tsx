@@ -70,14 +70,14 @@ export default function Home() {
   const isReading = Boolean(currentBook?.manifestUrl);
 
   const themeVars: CSSProperties & Record<string, string> = {
-    "--tls-page-background": brandingConfig.theme.colors.background,
-    "--tls-surface": brandingConfig.theme.colors.surface,
-    "--tls-surface-alt": brandingConfig.theme.colors.surfaceAlt,
-    "--tls-border": brandingConfig.theme.colors.border,
-    "--tls-text": brandingConfig.theme.colors.textPrimary,
-    "--tls-text-secondary": brandingConfig.theme.colors.textSecondary,
-    "--tls-accent": brandingConfig.theme.colors.accent,
-    "--tls-accent-text": brandingConfig.theme.colors.accentText,
+    "--tls-brand-background": brandingConfig.theme.colors.background,
+    "--tls-brand-surface": brandingConfig.theme.colors.surface,
+    "--tls-brand-surface-alt": brandingConfig.theme.colors.surfaceAlt,
+    "--tls-brand-border": brandingConfig.theme.colors.border,
+    "--tls-brand-text": brandingConfig.theme.colors.textPrimary,
+    "--tls-brand-text-secondary": brandingConfig.theme.colors.textSecondary,
+    "--tls-brand-accent": brandingConfig.theme.colors.accent,
+    "--tls-brand-accent-text": brandingConfig.theme.colors.accentText,
     "--th-theme-background": isReading ? "#000000" : brandingConfig.theme.colors.background,
   };
 

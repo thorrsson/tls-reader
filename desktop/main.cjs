@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, utilityProcess } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { ReaderServerRuntime } = require('./server-runtime.cjs');
 const { isAllowedExternalUrl } = require('./url-policy.cjs');
@@ -46,6 +46,7 @@ if (!app.requestSingleInstanceLock()) {
       minWidth: 720,
       minHeight: 560,
       show: false,
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#17151b' : '#65182d',
       webPreferences: {
         contextIsolation: true,
         sandbox: true,
@@ -54,8 +55,13 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     const window = mainWindow;
+    const updateBackground = () => {
+      window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17151b' : '#65182d');
+    };
+    nativeTheme.on('updated', updateBackground);
     window.once('ready-to-show', () => window.show());
     window.on('closed', () => {
+      nativeTheme.removeListener('updated', updateBackground);
       if (mainWindow === window) mainWindow = null;
     });
     secureWindow(window, { serverUrl, token: runtime.authToken, openExternal });
