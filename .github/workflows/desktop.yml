@@ -39,12 +39,8 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
           node <<'NODE'
-          const { version } = require("./package.json");
-          const expectedTag = `v${version}`;
-          if (process.env.RELEASE_TAG !== expectedTag) {
-            console.error(`Release tag must exactly match the package version (${expectedTag}).`);
-            process.exit(1);
-          }
+          const { releaseVersion } = require("./scripts/release-version.cjs");
+          releaseVersion(process.env.RELEASE_TAG);
 
           const backendVariables = [
             "NEXT_PUBLIC_TLS_API_BASE_URL",
@@ -126,6 +122,12 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: Embed release version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release-version.cjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

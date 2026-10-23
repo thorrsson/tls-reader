@@ -134,7 +134,7 @@ test('workflow script extraction supports both LF and Windows CRLF checkouts', (
 test('release validation permits absent Windows credentials but requires macOS and complete Windows pairs', () => {
   const source = validationSource(fs.readFileSync('.github/workflows/desktop.yml', 'utf8'));
   const env = {
-    RELEASE_TAG: `v${require('../package.json').version}`,
+    RELEASE_TAG: 'v8.7.6',
     NEXT_PUBLIC_TLS_API_BASE_URL: 'https://example.com',
     NEXT_PUBLIC_TLS_AUTH_URL: 'https://example.com/auth/login',
     NEXT_PUBLIC_TLS_CATALOG_URL: 'https://example.com/opds/publications',
@@ -142,6 +142,7 @@ test('release validation permits absent Windows credentials but requires macOS a
   };
   const validate = extra => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', env: { ...env, ...extra } });
   assert.equal(validate({}).status, 0);
+  assert.notEqual(validate({ RELEASE_TAG: 'vnot-a-version' }).status, 0);
   assert.equal(validate({ WIN_CSC_LINK: 'cert', WIN_CSC_KEY_PASSWORD: 'password' }).status, 0);
   for (const extra of [
     { WIN_CSC_LINK: 'cert' }, { WIN_CSC_KEY_PASSWORD: 'password' },

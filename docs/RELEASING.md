@@ -49,10 +49,9 @@ Tag builds fail before packaging if any required macOS signing/notarization secr
 
 ## Create a release
 
-1. Update both the root and `desktop/package.json` versions together and commit the release changes to `main`. Both currently use `0.1.0`; tests enforce that they match.
-2. Create and push the matching version tag, for example `v0.1.0` for package version `0.1.0`.
-3. The workflow requires the tag to exactly equal `v<package.json version>`. It runs the full native platform matrix and stops if any platform fails.
-4. After all platform jobs succeed, a single publish job downloads all installers, blockmaps, and `latest*.yml` updater metadata. It creates a draft GitHub Release, uploads the complete asset set, then publishes the release.
+1. Create and push a version tag on the commit to release, for example `git tag v0.2.0 && git push origin v0.2.0`. Tags must be `v` followed by a valid semantic version.
+2. The tag is the source of truth: each native build automatically stamps its version (without the `v`) into the root and `desktop/package.json` before installing dependencies and building. No version-file edits or version-bump commits are needed. The embedded application version, installer names, and updater metadata use that version. These changes exist only in the CI checkout; local, PR, and `main` builds keep the checked-in development version.
+3. The workflow runs the full native platform matrix and stops if any platform fails. After all platform jobs succeed, a single publish job downloads all installers, blockmaps, and `latest*.yml` updater metadata. It creates a draft GitHub Release, uploads the complete asset set, then publishes the release.
 
 Release outputs are a universal macOS DMG and ZIP, a Windows x64 NSIS installer, and a Linux x64 AppImage. The electron-updater metadata and blockmaps are included alongside the installers. Releases are tag-triggered; pull requests and `main` pushes never publish a release. The workflow does not create a release until a version tag is pushed.
 
