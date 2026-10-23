@@ -342,7 +342,7 @@ const getPublicationsFeedUrl = (payload: unknown, sourceUrl: string): string | n
   if (!href) {
     return null;
   }
-  return resolveAbsoluteUrl(href, sourceUrl);
+  return resolvePublicationsFeedUrl(href, sourceUrl);
 };
 
 const catalogCandidateUrls = Array.from(
@@ -352,6 +352,29 @@ const catalogCandidateUrls = Array.from(
     new URL("/opds/publications", apiBaseUrl).toString(),
   ]),
 );
+
+const configuredCatalogOrigins = new Set(
+  [apiBaseUrl, catalogUrl].map((value) => new URL(value).origin),
+);
+
+const resolvePublicationsFeedUrl = (href: string, sourceUrl: string): string | null => {
+  try {
+    const source = new URL(sourceUrl);
+    const candidate = new URL(href, source);
+    if (
+      !["http:", "https:"].includes(candidate.protocol) ||
+      candidate.username ||
+      candidate.password ||
+      !configuredCatalogOrigins.has(candidate.origin) ||
+      (source.protocol === "https:" && candidate.protocol !== "https:")
+    ) {
+      return null;
+    }
+    return candidate.toString();
+  } catch {
+    return null;
+  }
+};
 
 const fetchCatalogPayload = async (
   authHeader: Record<string, string>,
@@ -364,6 +387,7 @@ const fetchCatalogPayload = async (
         ...authHeader,
         accept: "application/opds+json,application/json",
       },
+      redirect: "manual",
     });
     if (!catalogResponse.ok) {
       if (catalogResponse.status === 404) {
@@ -384,6 +408,7 @@ const fetchCatalogPayload = async (
         ...authHeader,
         accept: "application/opds+json,application/json",
       },
+      redirect: "manual",
     });
     if (!publicationsResponse.ok) {
       if (publicationsResponse.status === 404) {
@@ -414,7 +439,7 @@ const parseCatalog = (
   if (!Array.isArray(root.publications)) {
     return [];
   }
-  return root.publications.slice(0, brandingConfig.library.maxItems).map((entry) => {
+  return root.publications.map((entry) => {
     const publication = entry as Record<string, unknown>;
     const metadata =
       typeof publication.metadata === "object" && publication.metadata !== null
@@ -460,7 +485,7 @@ const loadLibraryFromToken = async (
   const authHeader = { Authorization: `Bearer ${token}` };
   const [catalogPayload, entitlementResponse] = await Promise.all([
     fetchCatalogPayload(authHeader),
-    fetch(entitlementsUrl, { headers: authHeader }),
+    fetch(entitlementsUrl, { headers: authHeader, redirect: "manual" }),
   ]);
   if (!entitlementResponse.ok) {
     throw toLibraryRequestError("Entitlements", entitlementResponse.status);
@@ -475,7 +500,7 @@ const loadLibraryFromToken = async (
   );
 
   if (!brandingConfig.library.requireEntitlement) {
-    return parsedCatalog;
+    return parsedCatalog.slice(0, brandingConfig.library.maxItems);
   }
 
   return parsedCatalog.filter((item) => {
@@ -489,7 +514,7 @@ const loadLibraryFromToken = async (
       return true;
     }
     return false;
-  });
+  }).slice(0, brandingConfig.library.maxItems);
 };
 
 export async function POST(request: NextRequest) {

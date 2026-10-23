@@ -124,6 +124,7 @@ if (!app.requestSingleInstanceLock()) {
       sourceDir,
       userDataPath: app.getPath('userData'),
       appVersion: app.getVersion(),
+      isPackaged: app.isPackaged,
       utilityProcess,
       onUnexpectedExit: (details) => {
         if (quitting) return;
@@ -149,8 +150,8 @@ if (!app.requestSingleInstanceLock()) {
       dialog,
       getWindow: () => mainWindow,
     });
-    await updater.start();
     createMainWindow();
+    await updater.start();
   }).catch((error) => {
     console.error('TLS Reader startup failed:', error);
     dialog.showErrorBox('TLS Reader could not start', error.message);

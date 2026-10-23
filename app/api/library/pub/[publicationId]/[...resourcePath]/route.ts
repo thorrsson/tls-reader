@@ -49,7 +49,7 @@ type WebPubManifest = {
   links?: ManifestLink[];
   readingOrder?: ManifestLink[];
   resources?: ManifestLink[];
-  toc?: Array<{ title: string; href: string }>;
+  toc?: Array<{ title: string; href: string; [key: string]: unknown }>;
   [key: string]: unknown;
 };
 
@@ -200,22 +200,45 @@ const rewriteManifestUrls = (value: unknown, publicationId: string): unknown => 
   return value;
 };
 
+const normalizeTocEntry = (
+  value: unknown,
+  publicationId: string,
+): { title: string; href: string; [key: string]: unknown } | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const entry = value as Record<string, unknown>;
+  const title = typeof entry.title === "string" ? entry.title : "";
+  const href = typeof entry.href === "string" ? toReaderHref(entry.href, publicationId) : "";
+  if (!title || !href) {
+    return null;
+  }
+  const normalized: Record<string, unknown> = { ...entry, title, href };
+  if (Array.isArray(entry.children)) {
+    normalized.children = entry.children
+      .map((child) => normalizeTocEntry(child, publicationId))
+      .filter((child): child is NonNullable<typeof child> => child !== null);
+  }
+  return normalized as { title: string; href: string; [key: string]: unknown };
+};
+
+const normalizeTocEntries = (
+  value: unknown,
+  publicationId: string,
+): Array<{ title: string; href: string; [key: string]: unknown }> =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => normalizeTocEntry(entry, publicationId))
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    : [];
+
 const resolveManifestToc = async (
   manifest: WebPubManifest,
   publicationId: string,
   authToken: string,
-): Promise<Array<{ title: string; href: string }>> => {
+): Promise<Array<{ title: string; href: string; [key: string]: unknown }>> => {
   if (Array.isArray(manifest.toc) && manifest.toc.length > 0) {
-    return manifest.toc
-      .map((entry) => {
-        const href = typeof entry.href === "string" ? toReaderHref(entry.href, publicationId) : "";
-        const title = typeof entry.title === "string" ? entry.title : "";
-        if (!href || !title) {
-          return null;
-        }
-        return { title, href };
-      })
-      .filter((entry): entry is { title: string; href: string } => entry !== null);
+    return normalizeTocEntries(manifest.toc, publicationId);
   }
 
   const entries = [
@@ -245,6 +268,7 @@ const resolveManifestToc = async (
       Authorization: `Bearer ${authToken}`,
       accept: "application/xml,text/xml,*/*",
     },
+    redirect: "manual",
   });
   if (!tocResponse.ok) {
     return [];
@@ -306,17 +330,23 @@ const withSelfLink = (manifest: WebPubManifest): WebPubManifest => {
   };
 };
 
+const hasPositionListLink = (manifest: WebPubManifest): boolean =>
+  (Array.isArray(manifest.links) ? manifest.links : []).some((link) => {
+    const relValues = Array.isArray(link.rel) ? link.rel.map(String) : [String(link.rel ?? "")];
+    return (
+      String(link.type ?? "") === "application/vnd.readium.position-list+json" ||
+      relValues.includes("http://www.w3.org/ns/pub-manifest#locators")
+    );
+  });
+
 const withPositionListLink = (manifest: WebPubManifest): WebPubManifest => {
   const links = Array.isArray(manifest.links) ? [...manifest.links] : [];
-  const alreadyPresent = links.some(
-    (link) => String(link.type ?? "") === "application/vnd.readium.position-list+json",
-  );
-  if (alreadyPresent) {
+  if (hasPositionListLink(manifest)) {
     return manifest;
   }
 
   links.push({
-    href: "positions.json",
+    href: "positions-fallback.json",
     type: "application/vnd.readium.position-list+json",
     rel: ["http://www.w3.org/ns/pub-manifest#locators"],
   });
@@ -399,13 +429,14 @@ export async function GET(
       targetUrl.searchParams.set(key, value);
     });
 
-    if (decodedResourcePath === "positions.json") {
+    if (decodedResourcePath === "positions-fallback.json") {
       const manifestUrl = new URL(`/pub/${encodeURIComponent(publicationId)}/manifest.json`, apiBaseUrl);
       const manifestUpstream = await fetch(manifestUrl.toString(), {
         headers: {
           Authorization: `Bearer ${token}`,
           accept: "application/webpub+json,application/json",
         },
+        redirect: "manual",
       });
       if (!manifestUpstream.ok) {
         const errorBody = await manifestUpstream.text();
@@ -416,6 +447,9 @@ export async function GET(
       }
 
       const rawManifest = (await manifestUpstream.json()) as WebPubManifest;
+      if (hasPositionListLink(rawManifest)) {
+        return NextResponse.json({ error: "No synthesized position list is available." }, { status: 404 });
+      }
       const rewrittenManifest = rewriteManifestUrls(rawManifest, publicationId) as WebPubManifest;
       return NextResponse.json(buildPositionListFromManifest(rewrittenManifest), {
         status: 200,
@@ -431,6 +465,7 @@ export async function GET(
         Authorization: `Bearer ${token}`,
         accept: "*/*",
       },
+      redirect: "manual",
     });
 
     if (!upstream.ok) {
@@ -467,23 +502,7 @@ export async function GET(
         // Ensure any existing toc entries (from rewriteManifestUrls pass-through)
         // are also in publication-relative href form; rewriteManifestUrls converts the hrefs,
         // so this is a safety pass in case the toc wasn't fully converted.
-        rewrittenManifest.toc = rewrittenManifest.toc
-          .map((entry) => {
-            if (typeof entry !== "object" || entry === null) {
-              return null;
-            }
-            const tocEntry = entry as Record<string, unknown>;
-            const title = typeof tocEntry.title === "string" ? tocEntry.title : "";
-            const hrefValue = typeof tocEntry.href === "string" ? toReaderHref(tocEntry.href, publicationId) : "";
-            if (!title || !hrefValue) {
-              return null;
-            }
-            return {
-              title,
-              href: hrefValue,
-            };
-          })
-          .filter((entry): entry is { title: string; href: string } => entry !== null);
+        rewrittenManifest.toc = normalizeTocEntries(rewrittenManifest.toc, publicationId);
       }
       const profileManifest = ensureEpubProfile(rewrittenManifest);
       const selfLinkedManifest = withSelfLink(profileManifest);

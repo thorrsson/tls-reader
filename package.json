@@ -28,14 +28,15 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@next/env": "16.2.9",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "electron": "44.9.0",
     "electron-builder": "26.15.3",
-    "sharp": "0.34.5",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "sharp": "0.34.5",
     "typescript": "^5"
   }
 }

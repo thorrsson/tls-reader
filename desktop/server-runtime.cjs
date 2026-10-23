@@ -100,6 +100,7 @@ class ReaderServerRuntime {
     sourceDir,
     userDataPath,
     appVersion,
+    isPackaged = false,
     utilityProcess,
     findFreePort: findPort = findFreePort,
     probe = probeServer,
@@ -113,6 +114,7 @@ class ReaderServerRuntime {
     this.sourceDir = sourceDir;
     this.userDataPath = userDataPath;
     this.appVersion = appVersion;
+    this.isPackaged = isPackaged;
     this.utilityProcess = utilityProcess;
     this.findFreePort = findPort;
     this.probe = probe;
@@ -148,7 +150,7 @@ class ReaderServerRuntime {
     try {
       await fs.access(path.join(this.runtimeDir, 'server.js'));
       await fs.access(path.join(this.runtimeDir, configName));
-      return;
+      if (this.isPackaged) return;
     } catch {
       // A partial previous copy is replaced through an isolated staging directory.
     }

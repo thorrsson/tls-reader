@@ -111,6 +111,24 @@ test('rejects staged symlinks that escape the reader template', async (t) => {
   await assert.rejects(runtime.start(), /non-portable symlink/);
 });
 
+test('unpackaged launches refresh changed staged content and backend without a version bump', async (t) => {
+  const { runtime, sourceDir } = await createRuntime(t);
+  await runtime._prepareRuntime();
+  await fs.writeFile(path.join(sourceDir, 'server.js'), 'updated standalone server');
+  await fs.writeFile(path.join(sourceDir, 'desktop-backend.json'), '{"runtimeEnv":{"API_ORIGIN":"https://new.example"}}');
+  await runtime._prepareRuntime();
+  assert.equal(await fs.readFile(path.join(runtime.runtimeDir, 'server.js'), 'utf8'), 'updated standalone server');
+  assert.match(await fs.readFile(path.join(runtime.runtimeDir, 'desktop-backend.json'), 'utf8'), /new.example/);
+});
+
+test('packaged launches reuse the immutable versioned runtime without overwriting writable cache', async (t) => {
+  const { runtime } = await createRuntime(t, { isPackaged: true });
+  await runtime._prepareRuntime();
+  await fs.writeFile(path.join(runtime.runtimeDir, 'cache-marker'), 'keep');
+  await runtime._prepareRuntime();
+  assert.equal(await fs.readFile(path.join(runtime.runtimeDir, 'cache-marker'), 'utf8'), 'keep');
+});
+
 test('copies directory links with explicit directory type and file links with explicit file type', async () => {
   const sourceDir = path.resolve('reader-fixture');
   const destinationDir = path.resolve('runtime-fixture');

@@ -121,3 +121,19 @@ test('manual install does nothing before an update is downloaded', async () => {
   await controller.installNow();
   assert.equal(updater.calls.some(([type]) => type === 'install'), false);
 });
+
+test('downloaded update remains installable after Later and subsequent manual or periodic checks', async () => {
+  const { controller, updater, timers } = createController();
+  await controller.start();
+  assert.equal(updater.autoInstallOnAppQuit, false);
+  updater.emit('update-downloaded', { version: '4.0.0' });
+  await new Promise(resolve => setImmediate(resolve));
+  const checks = updater.calls.filter(([type]) => type === 'check').length;
+  updater.checkError = new Error('offline');
+  await controller.checkNow();
+  await timers[0].callback();
+  assert.equal(updater.calls.filter(([type]) => type === 'check').length, checks);
+  assert.equal(controller.state.status, 'downloaded');
+  assert.equal(controller.installNow(), true);
+  assert.deepEqual(updater.calls.at(-1), ['install', false, true]);
+});

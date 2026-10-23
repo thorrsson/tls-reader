@@ -46,7 +46,7 @@ pnpm desktop:build
 pnpm desktop:start
 ```
 
-`desktop:build` builds the Next.js reader with an empty base-reader URL and stages the standalone reader for Electron. `pnpm smoke` checks that the staged standalone reader works after relocation.
+`desktop:build` loads Next's production environment files (including `.env.local`), with explicit shell variables taking precedence, then builds the reader with an empty base-reader URL and stages it for Electron. Unpackaged launches refresh the writable reader copy on every start, so rebuilding content or backend configuration does not require a version bump. Packaged apps retain their versioned runtime cache. `pnpm smoke` checks that the staged standalone reader works after relocation.
 
 ## Checks and packaging
 

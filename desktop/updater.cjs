@@ -71,6 +71,10 @@ class UpdateController {
 
   async checkNow() {
     if (!this.isEnabled() || !this.started) return false;
+    if (this.state.status === 'downloaded') {
+      await this._promptForRestart();
+      return true;
+    }
     this.state = { ...this.state, status: 'checking', error: undefined };
     try {
       await this.updater.checkForUpdates();

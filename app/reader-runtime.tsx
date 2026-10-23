@@ -17,6 +17,11 @@ import "@edrlab/thorium-web/epub/styles";
 import "@edrlab/thorium-web/webpub/styles";
 import "@edrlab/thorium-web/misc/styles";
 import { createDesktopReaderPlugins } from "./reader-desktop-controls";
+import {
+  canApplyServerProgress,
+  getReaderRuntimeState,
+  ProgressSaveQueue,
+} from "./reader-runtime-helpers";
 
 type ReaderRuntimeProps = {
   manifestUrl: string;
@@ -286,10 +291,45 @@ const ReaderContent = ({
     url: manifestUrl,
   });
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
-  const lastQueuedPayloadRef = useRef<string>("");
+  const localPositionRevisionRef = useRef(0);
 
   const positionLocalDataKey = `${localDataKey ?? storageKey}:position-v4`;
+  const pendingPositionKey = `${positionLocalDataKey}:pending`;
+  const progressSaveQueue = useMemo(
+    () =>
+      new ProgressSaveQueue(
+        async (payload, keepalive) => {
+          if (!publicationId) {
+            return;
+          }
+
+          const response = await fetch(
+            `/api/library/progress/${encodeURIComponent(publicationId)}`,
+            {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ locator: JSON.parse(payload) as SerializedLocator }),
+              keepalive,
+            },
+          );
+          if (!response.ok) {
+            throw new Error(`Reading progress save failed (${response.status}).`);
+          }
+
+          try {
+            if (window.localStorage.getItem(pendingPositionKey) === payload) {
+              window.localStorage.removeItem(pendingPositionKey);
+            }
+          } catch (storageError) {
+            console.error("Unable to clear the saved reading progress marker.", storageError);
+          }
+        },
+        (saveError) => {
+          console.error("Unable to save reading progress to the server.", saveError);
+        },
+      ),
+    [pendingPositionKey, publicationId],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -297,8 +337,38 @@ const ReaderContent = ({
     }
     let cancelled = false;
     const hydrationTarget = `${positionLocalDataKey}:${publicationId ?? "none"}`;
+    const revisionAtRequestStart = localPositionRevisionRef.current;
+    let hadPendingLocalProgress = false;
+    try {
+      hadPendingLocalProgress =
+        window.localStorage.getItem(pendingPositionKey) !== null;
+    } catch (storageError) {
+      console.error("Unable to inspect pending local reading progress.", storageError);
+    }
 
     const hydratePosition = async () => {
+      if (hadPendingLocalProgress) {
+        try {
+          const pendingPayload = window.localStorage.getItem(pendingPositionKey);
+          if (pendingPayload) {
+            const pendingLocator = JSON.parse(pendingPayload) as SerializedLocator;
+            const sanitized = sanitizeLocator(pendingLocator, publication);
+            if (sanitized) {
+              const serialized = JSON.stringify(sanitized);
+              try {
+                window.localStorage.setItem(positionLocalDataKey, serialized);
+              } catch (storageError) {
+                console.error("Unable to restore pending local reading progress.", storageError);
+              }
+              progressSaveQueue.queue(serialized);
+              progressSaveQueue.flush();
+            }
+          }
+        } catch (storageError) {
+          console.error("Unable to recover pending local reading progress.", storageError);
+        }
+      }
+
       try {
         if (publicationId) {
           const response = await fetch(
@@ -311,17 +381,42 @@ const ReaderContent = ({
             const payload = (await response.json()) as { locator?: SerializedLocator };
             if (payload.locator) {
               const sanitized = sanitizeLocator(payload.locator, publication);
-              if (sanitized) {
-                window.localStorage.setItem(
-                  positionLocalDataKey,
-                  JSON.stringify(sanitized),
-                );
+              let hasPendingLocalProgress = false;
+              try {
+                hasPendingLocalProgress =
+                  window.localStorage.getItem(pendingPositionKey) !== null;
+              } catch (storageError) {
+                console.error("Unable to inspect pending local reading progress.", storageError);
+                hasPendingLocalProgress = true;
+              }
+              if (
+                !cancelled &&
+                sanitized &&
+                canApplyServerProgress(
+                  revisionAtRequestStart,
+                  localPositionRevisionRef.current,
+                  hadPendingLocalProgress,
+                  hasPendingLocalProgress,
+                )
+              ) {
+                try {
+                  window.localStorage.setItem(
+                    positionLocalDataKey,
+                    JSON.stringify(sanitized),
+                  );
+                } catch (storageError) {
+                  console.error("Unable to cache server reading progress locally.", storageError);
+                }
               }
             }
+          } else {
+            console.error(
+              `Unable to load reading progress from the server (${response.status}).`,
+            );
           }
         }
-      } catch {
-        // Ignore transient network/storage failures and keep local fallback.
+      } catch (hydrationError) {
+        console.error("Unable to hydrate reading progress.", hydrationError);
       } finally {
         if (!cancelled) {
           setHydratedKey(hydrationTarget);
@@ -333,15 +428,19 @@ const ReaderContent = ({
     return () => {
       cancelled = true;
     };
-  }, [positionLocalDataKey, publication, publicationId]);
+  }, [
+    pendingPositionKey,
+    positionLocalDataKey,
+    progressSaveQueue,
+    publication,
+    publicationId,
+  ]);
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current !== null && typeof window !== "undefined") {
-        window.clearTimeout(saveTimerRef.current);
-      }
+      progressSaveQueue.flush();
     };
-  }, []);
+  }, [progressSaveQueue]);
 
   // Sanitize persisted positions: normalize hrefs to publication-relative form
   // and drop any that aren't present in the current readingOrder. This prevents
@@ -387,57 +486,70 @@ const ReaderContent = ({
             return;
           }
 
-          window.localStorage.setItem(
-            positionLocalDataKey,
-            JSON.stringify(sanitized),
-          );
-
-          if (!publicationId) {
-            return;
-          }
-
           const payload = JSON.stringify(sanitized);
-          if (payload === lastQueuedPayloadRef.current) {
-            return;
+          try {
+            window.localStorage.setItem(pendingPositionKey, payload);
+          } catch (storageError) {
+            console.error("Unable to mark local reading progress as pending.", storageError);
           }
-
-          if (saveTimerRef.current !== null) {
-            window.clearTimeout(saveTimerRef.current);
+          try {
+            window.localStorage.setItem(positionLocalDataKey, payload);
+            localPositionRevisionRef.current += 1;
+          } catch (storageError) {
+            console.error("Unable to save reading progress locally.", storageError);
           }
-          saveTimerRef.current = window.setTimeout(() => {
-            lastQueuedPayloadRef.current = payload;
-            void fetch(`/api/library/progress/${encodeURIComponent(publicationId)}`, {
-              method: "PUT",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ locator: sanitized }),
-            }).catch(() => {
-              // Keep local state even if server write fails.
-            });
-          }, 700);
-        } catch {
-          // Ignore storage write failures (e.g. private mode quota).
+          if (publicationId) {
+            const saveStatus = progressSaveQueue.queue(payload);
+            if (saveStatus === "already-saved") {
+              try {
+                if (window.localStorage.getItem(pendingPositionKey) === payload) {
+                  window.localStorage.removeItem(pendingPositionKey);
+                }
+              } catch (storageError) {
+                console.error("Unable to clear the saved reading progress marker.", storageError);
+              }
+            }
+          }
+        } catch (serializationError) {
+          console.error("Unable to serialize reading progress.", serializationError);
         }
       },
     }),
-    [publication, positionLocalDataKey, publicationId],
+    [
+      pendingPositionKey,
+      positionLocalDataKey,
+      publication,
+      publicationId,
+      progressSaveQueue,
+    ],
   );
 
-  const isPositionReady =
-    hydratedKey === `${positionLocalDataKey}:${publicationId ?? "none"}`;
-  if (isLoading || !publication || !profile || !localDataKey || !isPositionReady) {
-    return <div className="reader-status">Loading Thorium Web publication…</div>;
+  const runtimeState = getReaderRuntimeState({
+    error,
+    isLoading,
+    publication,
+    profile,
+    localDataKey,
+    isPositionReady:
+      hydratedKey === `${positionLocalDataKey}:${publicationId ?? "none"}`,
+  });
+  if (runtimeState.status === "error") {
+    const errorText =
+      runtimeState.error.context ??
+      runtimeState.error.errorName ??
+      "Failed to load publication";
+    return <div className="reader-status reader-status-error">{errorText}</div>;
   }
 
-  if (error) {
-    const errorText = error.context ?? error.errorName ?? "Failed to load publication";
-    return <div className="reader-status reader-status-error">{errorText}</div>;
+  if (runtimeState.status === "loading") {
+    return <div className="reader-status">Loading Thorium Web publication…</div>;
   }
 
   return (
     <StatefulReaderWrapper
-      profile={profile}
-      publication={publication}
-      localDataKey={localDataKey}
+      profile={runtimeState.profile}
+      publication={runtimeState.publication}
+      localDataKey={runtimeState.localDataKey}
       positionStorage={positionStorage}
       preferences={readerPreferences}
       i18n={readerI18nFallbackOptions}
