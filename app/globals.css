@@ -68,6 +68,8 @@ body.tls-reader-active {
 
 .thorium-app {
   min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--tls-page-background, #f5f5f5);
@@ -172,7 +174,7 @@ body.tls-reader-active {
 
 .thorium-runtime {
   position: relative;
-  height: 100dvh;
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overflow: hidden;
   background: #000;
 }

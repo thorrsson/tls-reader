@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TLS Reader</string>
+    <string name="title_activity_main">TLS Reader</string>
+    <string name="package_name">com.tlslibrary.reader</string>
+    <string name="custom_url_scheme">com.tlslibrary.reader</string>
+</resources>

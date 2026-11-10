@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     ".mobile-build/**",
+    "ios/**",
+    "android/**",
     "build/**",
     "dist/**",
     "resources/**",
