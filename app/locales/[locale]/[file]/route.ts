@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const THORIUM_LOCALES_DIR = path.join(
@@ -205,6 +205,20 @@ const readLocaleFile = async (
   }
   return null;
 };
+// Prerender every locale Thorium ships (plus base languages such as `pt`) so
+// static exports (mobile) contain them; standalone servers still resolve
+// other locales on demand.
+export async function generateStaticParams() {
+  const entries = await readdir(THORIUM_LOCALES_DIR, { withFileTypes: true });
+  const shipped = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  const locales = new Set(
+    [...shipped, ...shipped.map((locale) => locale.split("-")[0])].filter(isSafeLocale),
+  );
+  return [...locales].flatMap((locale) =>
+    ["thorium-web.json", "thorium-shared.json"].map((file) => ({ locale, file })),
+  );
+}
+
 type RouteContext = {
   params: Promise<{
     locale: string;

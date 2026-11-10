@@ -8,8 +8,16 @@ const allowedDevOrigins = process.env.ALLOWED_DEV_ORIGINS
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// scripts/build-mobile.cjs builds a static export for the Capacitor shells from
+// a staged copy inside the repository, so Turbopack's root must include the
+// repository's node_modules.
+const isMobileBuild = process.env.TLS_BUILD_TARGET === "mobile";
+
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: isMobileBuild ? "export" : "standalone",
+  ...(isMobileBuild && process.env.TLS_TURBOPACK_ROOT
+    ? { turbopack: { root: process.env.TLS_TURBOPACK_ROOT } }
+    : {}),
   images: { unoptimized: true },
   // The Thorium reader (@edrlab/thorium-web / @readium navigator) keeps its
   // EPUB navigator in a module-level singleton and tears it down in an async

@@ -17,6 +17,7 @@
     "desktop:build": "node scripts/build-desktop.cjs",
     "desktop:start": "electron .",
     "desktop:package": "pnpm desktop:build && electron-builder --config electron-builder.yml --publish never",
+    "mobile:build": "node scripts/build-mobile.cjs",
     "smoke": "node scripts/smoke.cjs",
     "icons": "node scripts/icons.cjs"
   },
