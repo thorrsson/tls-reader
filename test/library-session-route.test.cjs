@@ -1,52 +1,32 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
-const vm = require('node:vm');
-const ts = require('typescript');
+const { loadTsModule } = require('./helpers/load-ts.cjs');
 const { NextResponse } = require('next/server');
 
 const branding = require('../config/thorium-web/branding.local.json');
 
 function loadSessionRoute({ fetchImpl, requireEntitlement = true } = {}) {
-  const filename = path.join(__dirname, '../app/api/library/session/route.ts');
-  const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  const module = { exports: {} };
   const config = {
     ...branding,
     library: { ...branding.library, requireEntitlement },
   };
-  vm.runInNewContext(source, {
-    module,
-    exports: module.exports,
-    URL,
-    Response,
-    Headers,
-    process: {
-      env: {
-        NEXT_PUBLIC_TLS_API_BASE_URL: 'https://api.library.test',
-        NEXT_PUBLIC_TLS_CATALOG_URL: 'https://catalog.library.test/opds',
+  return loadTsModule('app/api/library/session/route.ts', {
+    globals: {
+      process: { env: {} },
+      fetch: (...args) => fetchImpl(...args),
+    },
+    stubs: {
+      'next/server': { NextResponse },
+      '@/config/thorium-web/branding.local.json': { default: config },
+      '@/lib/branding': {
+        integrationConfig: {
+          tlsApiBaseUrl: 'https://api.library.test',
+          authUrl: 'https://api.library.test/auth/login',
+          catalogUrl: 'https://catalog.library.test/opds',
+        },
       },
     },
-    fetch: (...args) => fetchImpl(...args),
-    require: (name) => {
-      if (name === 'next/server') return { NextResponse };
-      if (name === '@/config/thorium-web/branding.local.json') return { default: config };
-      if (name === '@/lib/branding') {
-        return {
-          integrationConfig: {
-            tlsApiBaseUrl: 'https://api.library.test',
-            authUrl: 'https://api.library.test/auth/login',
-            catalogUrl: 'https://catalog.library.test/opds',
-          },
-        };
-      }
-      throw new Error(`Unexpected dependency: ${name}`);
-    },
-  }, { filename });
-  return module.exports;
+  });
 }
 
 function sessionRequest() {
