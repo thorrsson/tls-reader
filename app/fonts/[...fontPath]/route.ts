@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const THORIUM_FONTS_DIR = path.join(
@@ -19,6 +19,19 @@ const CONTENT_TYPES: Record<string, string> = {
 
 const isSafeSegment = (value: string) =>
   value !== "." && value !== ".." && /^[A-Za-z0-9 ._-]+$/.test(value);
+
+// Prerender every bundled font so static exports (mobile) contain them.
+export async function generateStaticParams() {
+  const entries = await readdir(THORIUM_FONTS_DIR, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && CONTENT_TYPES[path.extname(entry.name).toLowerCase()])
+    .map((entry) => ({
+      fontPath: path
+        .relative(THORIUM_FONTS_DIR, path.join(entry.parentPath, entry.name))
+        .split(path.sep),
+    }))
+    .filter(({ fontPath }) => fontPath.every(isSafeSegment));
+}
 
 type RouteContext = {
   params: Promise<{ fontPath: string[] }>;

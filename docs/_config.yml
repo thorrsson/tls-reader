@@ -5,6 +5,7 @@ baseurl: /tls-reader
 markdown: kramdown
 exclude:
   - RELEASING.md
+  - MOBILE.md
 defaults:
   - scope:
       path: ""

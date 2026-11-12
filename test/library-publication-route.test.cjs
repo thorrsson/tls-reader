@@ -1,34 +1,25 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
-const vm = require('node:vm');
-const ts = require('typescript');
+const { loadTsModule } = require('./helpers/load-ts.cjs');
 const { NextResponse } = require('next/server');
 
 function loadPublicationRoute(fetchImpl) {
-  const filename = path.join(
-    __dirname,
-    '../app/api/library/pub/[publicationId]/[...resourcePath]/route.ts',
-  );
-  const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(source, {
-    module,
-    exports: module.exports,
-    URL,
-    Response,
-    Headers,
-    process: { env: { NEXT_PUBLIC_TLS_API_BASE_URL: 'https://api.library.test' } },
-    fetch: (...args) => fetchImpl(...args),
-    require: (name) => {
-      if (name === 'next/server') return { NextResponse };
-      throw new Error(`Unexpected dependency: ${name}`);
+  return loadTsModule('app/api/library/pub/[publicationId]/[...resourcePath]/route.ts', {
+    globals: {
+      process: { env: {} },
+      fetch: (...args) => fetchImpl(...args),
     },
-  }, { filename });
-  return module.exports;
+    stubs: {
+      'next/server': { NextResponse },
+      '@/lib/branding': {
+        integrationConfig: {
+          tlsApiBaseUrl: 'https://api.library.test',
+          authUrl: 'https://api.library.test/auth/login',
+          catalogUrl: 'https://api.library.test/opds',
+        },
+      },
+    },
+  });
 }
 
 function publicationRequest(resourcePath) {

@@ -7,6 +7,10 @@ import type { CSSProperties, FormEvent } from "react";
 import brandingConfig from "@/config/thorium-web/branding.local.json";
 import ReaderErrorBoundary from "./reader-error-boundary";
 import type { DesktopCommand } from "@/lib/desktop";
+import { installMobileLibraryBridge } from "@/lib/library/mobile";
+
+// Must run before the first effect issues an /api/library request.
+installMobileLibraryBridge();
 
 const subscribeDesktop = () => () => {};
 const desktopSnapshot = () => Boolean(window.tlsDesktop);

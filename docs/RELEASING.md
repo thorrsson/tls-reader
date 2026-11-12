@@ -4,6 +4,8 @@ The `Desktop CI and release` workflow checks and packages the desktop applicatio
 
 Pull requests and `main` pushes skip this workflow when all changed files are under `docs/`, root-level Markdown files, or `test/pages-downloads.test.cjs`. Mixed changes that also touch application code, dependencies, other tests, or workflows still run desktop CI. Version tags always run release builds because GitHub does not apply path filters to tag pushes. GitHub Pages deployment is unaffected. Do not require desktop workflow checks unconditionally in branch protection: GitHub leaves path-filtered checks pending on skipped pull requests.
 
+The same tag also starts the `Mobile CI and release` workflow, which uploads iOS builds to TestFlight and Android builds to the Google Play internal track. Its store credentials, setup and versioning are described in [Mobile apps](MOBILE.md).
+
 ## Configure repository settings
 
 Set these optional repository **variables** under **Settings → Secrets and variables → Actions → Variables** to use a TLS backend in CI builds:
@@ -39,7 +41,7 @@ bash scripts/setup-release-secrets.sh --env-file .env.release --dry-run
 bash scripts/setup-release-secrets.sh --env-file .env.release
 ```
 
-The script defaults to `.env` for compatibility with the other projects' uploader. Pass `--env-file /path/to/existing/.env --repo thorrsson/tls-reader` to reuse an existing credentials file. It parses values literally without sourcing/evaluating the file, rejects unknown/duplicate keys and missing macOS credentials, and never prints secret values. Recognized Sparkle keys and `MACOS_TEAM_ID` are ignored with a names-only notice; TLS Reader does not use Sparkle. Backend `NEXT_PUBLIC_*` variables belong in repository Actions variables, not this credential file.
+The script defaults to `.env` for compatibility with the other projects' uploader. Pass `--env-file /path/to/existing/.env --repo thorrsson/tls-reader` to reuse an existing credentials file. It parses values literally without sourcing/evaluating the file, rejects unknown/duplicate keys and missing macOS credentials, and never prints secret values. It also accepts the optional iOS and Android store secrets from [Mobile apps](MOBILE.md); each platform group must be complete. Recognized Sparkle keys and `MACOS_TEAM_ID` are ignored with a names-only notice; TLS Reader does not use Sparkle. Backend `NEXT_PUBLIC_*` variables belong in repository Actions variables, not this credential file.
 
 The uploader requires authenticated `gh` access and sends values through stdin into the existing `release` environment. Windows secrets are optional, but must be supplied as a pair if present. Without them, the workflow explicitly warns and publishes an unsigned Windows installer; users may see SmartScreen or unknown-publisher warnings. Configured but incomplete or invalid credentials fail the release rather than falling back to unsigned. Omitting values from the uploader does not delete existing GitHub secrets. Upload failures identify the failed name and may leave earlier uploads in place; rerun after correcting the error. Dry-run with an explicit `--repo` works offline.
 
