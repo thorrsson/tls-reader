@@ -180,3 +180,66 @@ test('Windows release warns only for absent credentials and never downgrades sig
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+const iosNames = ['IOS_DISTRIBUTION_CERTIFICATE_P12', 'IOS_DISTRIBUTION_CERTIFICATE_PASSWORD', 'IOS_PROVISIONING_PROFILE'];
+const androidNames = [
+  'ANDROID_UPLOAD_KEYSTORE', 'ANDROID_UPLOAD_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD',
+  'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON',
+];
+const mobileNames = [...iosNames, ...androidNames];
+
+test('dotenv importer uploads complete mobile store groups and rejects partial ones', shellTest, () => {
+  const complete = run(`${fixture}\n${mobileNames.map(name => `${name}=synthetic-${name}`).join('\n')}\n`, [], true);
+  assert.equal(complete.status, 0, complete.stderr);
+  for (const name of mobileNames) {
+    assert.ok(complete.calls.includes(`secret set ${name} --env release --repo thorrsson/tls-reader\nsynthetic-${name}\n`), name);
+  }
+  assert.ok(!complete.stdout.includes('not supplied; tagged mobile'));
+  const absent = run(fixture);
+  assert.match(absent.stdout, /iOS TestFlight secrets not supplied/);
+  assert.match(absent.stdout, /Android Google Play secrets not supplied/);
+  for (const name of [iosNames[2], androidNames[4]]) {
+    const partial = run(`${fixture}\n${name}=x`, [], true);
+    assert.notEqual(partial.status, 0);
+    assert.match(partial.stderr, /must be supplied together/);
+    assert.equal(partial.calls, '');
+  }
+  const template = fs.readFileSync('.env.release.example', 'utf8');
+  for (const name of mobileNames) assert.ok(template.includes(`\n${name}=\n`), name);
+});
+
+test('mobile release validation requires HTTPS backends, store credentials and a known Play status', () => {
+  const workflow = fs.readFileSync('.github/workflows/mobile.yml', 'utf8');
+  const source = validationSource(workflow);
+  const env = {
+    RELEASE_TAG: 'v8.7.6-beta.1',
+    BUILD_NUMBER: '12',
+    NEXT_PUBLIC_TLS_API_BASE_URL: 'https://example.com',
+    NEXT_PUBLIC_TLS_AUTH_URL: 'https://example.com/auth/login',
+    NEXT_PUBLIC_TLS_CATALOG_URL: 'https://example.com/opds/publications',
+    ...Object.fromEntries([...mobileNames, 'NOTARY_API_KEY_ID', 'NOTARY_API_ISSUER_ID', 'NOTARY_API_KEY_P8'].map(name => [name, 'synthetic'])),
+  };
+  const validate = extra => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', env: { ...env, ...extra } });
+  assert.equal(validate({}).status, 0, validate({}).stderr);
+  assert.equal(validate({ ANDROID_PLAY_RELEASE_STATUS: 'draft' }).status, 0);
+  for (const extra of [
+    { RELEASE_TAG: 'v1.2' }, { BUILD_NUMBER: '0' }, { NEXT_PUBLIC_TLS_AUTH_URL: 'http://example.com/auth/login' },
+    { IOS_PROVISIONING_PROFILE: '' }, { GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: '' }, { NOTARY_API_KEY_P8: '' },
+    { ANDROID_PLAY_RELEASE_STATUS: 'inProgress' },
+  ]) assert.notEqual(validate(extra).status, 0, JSON.stringify(extra));
+  for (const name of mobileNames) assert.ok(workflow.includes(`secrets.${name}`), name);
+  assert.equal((workflow.match(/environment: .*'release' \|\| 'ci'/g) || []).length, 3);
+});
+
+test('iOS TestFlight script refuses to run without every credential and version', shellTest, () => {
+  const env = Object.fromEntries([
+    ...iosNames, 'NOTARY_API_KEY_ID', 'NOTARY_API_ISSUER_ID', 'NOTARY_API_KEY_P8', 'TLS_MARKETING_VERSION', 'TLS_BUILD_NUMBER',
+  ].map(name => [name, 'synthetic']));
+  for (const name of ['IOS_PROVISIONING_PROFILE', 'NOTARY_API_KEY_P8', 'TLS_BUILD_NUMBER']) {
+    const result = spawnSync('/bin/bash', ['scripts/ios-testflight.sh'], {
+      encoding: 'utf8', env: { PATH: '/nonexistent', ...env, [name]: '' },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, new RegExp(`${name} must be set`));
+  }
+});

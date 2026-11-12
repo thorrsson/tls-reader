@@ -68,7 +68,7 @@ The hidden Electron smoke checks the login page, API session response, local-ser
 
 The pnpm dependency policy permits one pinned upstream Thorium Git locale dependency: `@edrlab/thorium-locales` at commit `b416fdb5cfa7ade7562fe108550e3b566857a7b1`. The workspace override fixes the archive URL and the lockfile records its integrity; see the release guide before changing this exception.
 
-Mobile applications are not included in this repository's desktop release workflow.
+iOS and Android apps are built with Capacitor from a static export of the same reader (`pnpm mobile:build`). The separate mobile workflow builds both on every change and uploads tagged releases to TestFlight and the Google Play internal track. See [docs/MOBILE.md](docs/MOBILE.md) for local development, store setup and credentials.
 
 ## Documentation site
 
@@ -76,7 +76,7 @@ User documentation will be available at [thorrsson.github.io/tls-reader](https:/
 
 ## App icon
 
-The original bookshelf icon uses the TLS burgundy palette. Its editable source is `assets/icon.svg`; packaged macOS, Windows and Linux icons are checked into `assets/icons/`. Run `pnpm icons` after editing the SVG (macOS is required to regenerate the ICNS file).
+The original bookshelf icon uses the TLS burgundy palette. Its editable source is `assets/icon.svg`; packaged macOS, Windows and Linux icons are checked into `assets/icons/`, and iOS/Android icons and splash screens into the native projects. Run `pnpm icons` after editing the SVG (macOS is required to regenerate the ICNS file).
 
 ## License
 

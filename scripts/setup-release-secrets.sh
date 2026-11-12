@@ -23,6 +23,8 @@ blank lines and whole-line comments. Values are literal: no shell execution,
 interpolation, escape expansion or inline comments. Encode .p12/.p8 as single-line
 base64. Unknown/duplicate keys are errors. macOS secrets are required; Windows
 secrets must be supplied together if present; otherwise Windows releases unsigned.
+iOS (IOS_*) and Android (ANDROID_*, GOOGLE_PLAY_*) store secrets are optional, but
+each platform group must be complete; tagged mobile releases fail without them.
 Sparkle keys from the other projects are recognized but NOT uploaded or used.
 USAGE
 }
@@ -51,8 +53,13 @@ required_secrets=(
     NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID NOTARY_API_KEY_P8
 )
 optional_secrets=(WIN_CSC_LINK WIN_CSC_KEY_PASSWORD)
+ios_secrets=(IOS_DISTRIBUTION_CERTIFICATE_P12 IOS_DISTRIBUTION_CERTIFICATE_PASSWORD IOS_PROVISIONING_PROFILE)
+android_secrets=(
+    ANDROID_UPLOAD_KEYSTORE ANDROID_UPLOAD_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+)
 ignored_secrets=(SPARKLE_PUBLIC_ED_KEY SPARKLE_PRIVATE_ED_KEY SPARKLE_PRIVATE_KEY MACOS_TEAM_ID)
-allowed_names=" ${required_secrets[*]} ${optional_secrets[*]} ${ignored_secrets[*]} "
+allowed_names=" ${required_secrets[*]} ${optional_secrets[*]} ${ios_secrets[*]} ${android_secrets[*]} ${ignored_secrets[*]} "
 seen_names=" "
 provided_names=" "
 names=()
@@ -98,6 +105,22 @@ done
 if [[ "${windows_count}" == 0 ]]; then
     printf 'Windows signing not supplied; Windows installers will be unsigned (SmartScreen warnings may appear).\n'
 fi
+
+# Mobile store credentials are optional, but each platform group must be complete.
+check_group() {
+    local label="$1"; shift
+    local count=0 name
+    for name in "$@"; do
+        if [[ "${provided_names}" == *" ${name} "* ]]; then count=$((count + 1)); fi
+    done
+    if [[ "${count}" == 0 ]]; then
+        printf "%s secrets not supplied; tagged mobile releases fail until they are set.\n" "${label}"
+    elif [[ "${count}" != "$#" ]]; then
+        die "${label} secrets must be supplied together: $*."
+    fi
+}
+check_group "iOS TestFlight" "${ios_secrets[@]}"
+check_group "Android Google Play" "${android_secrets[@]}"
 
 export GH_PROMPT_DISABLED=1
 unset GH_DEBUG

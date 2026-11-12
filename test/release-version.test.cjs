@@ -53,3 +53,30 @@ test('every release build stamps manifests before dependency installation and pa
   assert.ok(build.indexOf('Embed release version from tag') < build.indexOf('pnpm desktop:build'));
   assert.ok(build.indexOf('Embed release version from tag') < build.indexOf('pnpm exec electron-builder'));
 });
+
+test('mobile versions strip prerelease metadata for the App Store and keep it for Android', () => {
+  const { mobileVersion, MAX_BUILD_NUMBER } = require('../scripts/mobile-version.cjs');
+  assert.deepEqual(mobileVersion('v1.2.3-beta.1+sha.5', '42'), {
+    marketingVersion: '1.2.3', versionName: '1.2.3-beta.1+sha.5', buildNumber: 42,
+  });
+  assert.equal(mobileVersion('v8.7.6', String(MAX_BUILD_NUMBER)).buildNumber, MAX_BUILD_NUMBER);
+  for (const build of [undefined, '', '0', '-1', '1.5', '01', String(MAX_BUILD_NUMBER + 1)]) {
+    assert.throws(() => mobileVersion('v1.2.3', build), /build number/);
+  }
+  assert.throws(() => mobileVersion('1.2.3', '1'), /valid semantic version/);
+});
+
+test('mobile version command exports store versions to the GitHub environment', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-mobile-version-'));
+  try {
+    const githubEnv = path.join(root, 'env');
+    const result = spawnSync(process.execPath, ['scripts/mobile-version.cjs'], {
+      encoding: 'utf8', env: { ...process.env, RELEASE_TAG: 'v2.0.0-rc.1', BUILD_NUMBER: '17', GITHUB_ENV: githubEnv },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(githubEnv, 'utf8'),
+      'TLS_MARKETING_VERSION=2.0.0\nTLS_VERSION_NAME=2.0.0-rc.1\nTLS_BUILD_NUMBER=17\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

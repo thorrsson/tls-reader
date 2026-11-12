@@ -1,6 +1,10 @@
 import Foundation
 import Security
 
+private final class TaskIdBox: @unchecked Sendable {
+    var value = -1
+}
+
 /// Shared native state for the TLS library: backend configuration, the session
 /// token (kept in the Keychain, never in WebView storage) and upstream HTTP.
 final class TlsNativeCore: NSObject, URLSessionTaskDelegate {
@@ -87,11 +91,11 @@ final class TlsNativeCore: NSObject, URLSessionTaskDelegate {
             }
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         }
-        var taskId = -1
+        let taskId = TaskIdBox()
         let task = session.dataTask(with: request) { [weak self] data, response, error in
             if let self {
                 self.lock.lock()
-                self.noRedirectTasks.remove(taskId)
+                self.noRedirectTasks.remove(taskId.value)
                 self.lock.unlock()
             }
             if let error {
@@ -102,7 +106,8 @@ final class TlsNativeCore: NSObject, URLSessionTaskDelegate {
                 completion(.failure(URLError(.badServerResponse)))
             }
         }
-        taskId = task.taskIdentifier
+        // Assigned before resume(), so the completion handler always sees it.
+        taskId.value = task.taskIdentifier
         if bearer != nil || !followRedirects {
             lock.lock()
             noRedirectTasks.insert(task.taskIdentifier)
