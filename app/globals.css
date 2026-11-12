@@ -300,6 +300,12 @@ body.tls-reader-active {
   list-style: none;
 }
 
+@media (max-width: 600px) {
+  .catalog-list ul {
+    padding-inline-start: 0;
+  }
+}
+
 .catalog-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
